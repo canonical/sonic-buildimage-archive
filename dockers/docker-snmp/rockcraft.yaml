@@ -92,25 +92,30 @@ parts:
     source: ./debs/sonic-eventd_1.0.0-0_amd64.deb
 
   # docker-snmp specific packages
-  install-libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.1_amd64:
+  install-libsnmp40t64_5.9.4:
     plugin: dump
     source-type: deb
-    source: ./debs/libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.1_amd64.deb
+    source: ./debs/libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.2_amd64.deb
 
-  install-libsnmp-base_5.9.4+dfsg-1.1ubuntu3.1_all:
+  install-libsnmp-base_5.9.4:
     plugin: dump
     source-type: deb
-    source: ./debs/libsnmp-base_5.9.4+dfsg-1.1ubuntu3.1_all.deb
+    source: ./debs/libsnmp-base_5.9.4+dfsg-1.1ubuntu3.2_all.deb
 
-  install-snmp_5.9.4+dfsg-1.1ubuntu3.1_amd64:
+  install-snmp_5.9.4:
     plugin: dump
     source-type: deb
-    source: ./debs/snmp_5.9.4+dfsg-1.1ubuntu3.1_amd64.deb
+    source: ./debs/snmp_5.9.4+dfsg-1.1ubuntu3.2_amd64.deb
 
-  install-snmpd_5.9.4+dfsg-1.1ubuntu3.1_amd64:
+  install-snmpd_5.9.4:
     plugin: dump
     source-type: deb
-    source: ./debs/snmpd_5.9.4+dfsg-1.1ubuntu3.1_amd64.deb
+    source: ./debs/snmpd_5.9.4+dfsg-1.1ubuntu3.2_amd64.deb
+
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
 
   install-packages:
     plugin: nil

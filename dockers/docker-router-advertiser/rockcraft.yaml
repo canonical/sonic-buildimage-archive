@@ -71,6 +71,11 @@ parts:
   # docker-router-advertiser specfic packages
   # NONE
 
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
+
   install-packages:
     plugin: nil
     stage-packages:

@@ -92,6 +92,11 @@ parts:
     source-type: deb
     source: ./debs/sonic-gnmi_0.1_amd64.deb
 
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
+
   install-packages:
     plugin: nil
     stage-packages:

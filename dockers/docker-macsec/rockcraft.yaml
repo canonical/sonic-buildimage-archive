@@ -77,6 +77,11 @@ parts:
     source-type: deb
     source: ./debs/libdashapi_1.0.0_amd64.deb
 
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
+
   # docker-swss-layer-noble packages
   install-swss_1.0.0_amd64:
     plugin: dump

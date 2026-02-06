@@ -100,6 +100,11 @@ parts:
     source-type: deb
     source: ./debs/libsaibcm_8.4.50.0_amd64.deb
 
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
+
   install-packages:
     plugin: nil
     stage-packages:
@@ -190,3 +195,5 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/start.sh                usr/bin/
       cp ${CRAFT_PROJECT_DIR}/start_led.sh            usr/bin/
       cp ${CRAFT_PROJECT_DIR}/bcmsh                   usr/bin/
+      
+      chmod +x usr/bin/dsserve usr/bin/bcmcmd
