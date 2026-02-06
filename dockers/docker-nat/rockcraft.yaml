@@ -134,6 +134,11 @@ parts:
     source-type: deb
     source: ./debs/libxtables12_1.8.9-2_amd64.deb
 
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
+
   install-iptables_1.8.9-2_amd64:
     plugin: dump
     source-type: deb

@@ -39,6 +39,10 @@ services:
       DISTRO: "noble"
 
 parts:
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
   setup-database:
     plugin: dump
     source: .

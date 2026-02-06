@@ -37,7 +37,7 @@ $(addprefix $(DEST)/, $(MAIN_TARGET)): $(DEST)/% :
 ifneq ($(BLDENV),noble)
 	dget -u https://packages.trafficmanager.net/public/debian/pool/main/n/net-snmp/net-snmp_$(SNMPD_VERSION_FULL).dsc
 else 
-	dget -u http://archive.ubuntu.com/ubuntu/pool/main/n/net-snmp/net-snmp_5.9.4+dfsg-1.1ubuntu3.1.dsc
+	dget -u http://archive.ubuntu.com/ubuntu/pool/main/n/net-snmp/net-snmp_5.9.4+dfsg-1.1ubuntu3.2.dsc
 endif
 
 	pushd net-snmp-$(SNMPD_VERSION)
