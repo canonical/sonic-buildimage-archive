@@ -16,6 +16,10 @@ platforms:
   amd64:  # Make sure this value matches your computer's architecture
 
 services:
+  rsyslogd:
+    command: /usr/sbin/rsyslogd -n -iNONE
+    override: replace
+    startup: enabled
   start:
     command: /usr/bin/start.sh
     override: replace
@@ -147,6 +151,7 @@ parts:
   install-packages:
     plugin: nil
     stage-packages:
+      - rsyslog
       - python3
       - libpython3.12
       # package dependencies
@@ -217,7 +222,12 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/files/readiness_probe.sh   usr/bin/
       cp ${CRAFT_PROJECT_DIR}/files/container_startup.py usr/share/sonic/scripts/
       cp ${CRAFT_PROJECT_DIR}/files/syslog-layer.yaml    usr/share/sonic/templates/
- 
+
+      # common - rsyslog
+      mkdir -p etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/00-load-omprog.conf  etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf         etc/
+
       # common - supervisor config files
       mkdir -p etc/supervisor/conf.d
       mkdir -p var/log/supervisor
@@ -250,3 +260,16 @@ parts:
       ln -s ebtables-nft           ${CRAFT_PRIME}/usr/sbin/ebtables
       ln -s ebtables-nft-restore   ${CRAFT_PRIME}/usr/sbin/ebtables-restore
       ln -s ebtables-nft-save      ${CRAFT_PRIME}/usr/sbin/ebtables-save
+
+  add-user:
+    plugin: nil
+    after: [install-common-files]
+
+    overlay-script: |
+      #syslog user
+      groupadd -R $CRAFT_OVERLAY syslog
+      useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
+
+    prime:
+      - etc/passwd
+      - etc/group

@@ -26,12 +26,16 @@ services:
       DEBIAN_FRONTEND: "noninteractive"
       IMAGENAME: "docker-lldp"
       DISTRO: "noble"
-  fake-syslog-socket:
-    command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
+  rsyslogd:
+    command: /usr/sbin/rsyslogd -n -iNONE
     override: replace
     startup: enabled
-    on-success: ignore
-    on-failure: ignore
+  # fake-syslog-socket:
+  #   command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
+  #   override: replace
+  #   startup: enabled
+  #   on-success: ignore
+  #   on-failure: ignore
   lldpd:
     command: /usr/sbin/lldpd -d -I Ethernet[0-9]*,eth0 -C eth0
     override: replace
@@ -124,6 +128,7 @@ parts:
   install-packages:
     plugin: nil
     stage-packages:
+      - rsyslog
       - python3
       - libpython3.12
       # docker-lldp specific packages
@@ -193,6 +198,11 @@ parts:
       mkdir -p var/log/supervisor
 
       cp ${CRAFT_PROJECT_DIR}/files/supervisord.conf     etc/supervisor/
+      
+      # common - rsyslog
+      mkdir -p etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/00-load-omprog.conf  etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf         etc/
 
       # common - supervisor related
       mkdir -p usr/share/sonic/templates
@@ -219,7 +229,7 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/envs                    usr/share/sonic/templates/
 
       # docker-lldp  lldp
-      mkdir etc/default
+      mkdir -p etc/default
       cp ${CRAFT_PROJECT_DIR}/lldpd                   etc/default/
       cp ${CRAFT_PROJECT_DIR}/lldpmgrd                usr/bin
 
@@ -227,6 +237,10 @@ parts:
     plugin: nil
     after: [install-common-files]
     overlay-script: |
+      #syslog user
+      groupadd -R $CRAFT_OVERLAY syslog
+      useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
+
       groupadd -R $CRAFT_OVERLAY _lldpd
       useradd -R $CRAFT_OVERLAY -M -r --system -g _lldpd _lldpd
     prime:
