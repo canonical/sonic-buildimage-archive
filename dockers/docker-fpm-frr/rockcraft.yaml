@@ -16,6 +16,10 @@ platforms:
   amd64:  # Make sure this value matches your computer's architecture
 
 services:
+  rsyslogd:
+    command: /usr/sbin/rsyslogd -n -iNONE
+    override: replace
+    startup: enabled
   init:
     command: /usr/bin/rock_init.sh
     startup: enabled
@@ -176,6 +180,7 @@ parts:
   install-packages:
     plugin: nil
     stage-packages:
+      - rsyslog
       - python3
       - libpython3.12
       # package dependencies
@@ -297,6 +302,10 @@ parts:
     after: [install-common-files]
 
     overlay-script: |
+      #syslog user
+      groupadd -R $CRAFT_OVERLAY syslog
+      useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
+
       #frr user
       groupadd -R $CRAFT_OVERLAY frr
       useradd -R $CRAFT_OVERLAY -M -r  -g  frr frr

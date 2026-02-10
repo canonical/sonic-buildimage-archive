@@ -25,12 +25,16 @@ services:
       DEBIAN_FRONTEND: "noninteractive"
       IMAGENAME: "docker-platform-monitor"
       DISTRO: "noble"
-  fake-syslog-socket:
-    command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
+  rsyslogd:
+    command: /usr/sbin/rsyslogd -n -iNONE
     override: replace
     startup: enabled
-    on-success: ignore
-    on-failure: ignore
+  # fake-syslog-socket:
+  #   command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
+  #   override: replace
+  #   startup: enabled
+  #   on-success: ignore
+  #   on-failure: ignore
   chassis_db_init:
     command: /usr/local/bin/chassis_db_init
     override: replace
@@ -160,6 +164,7 @@ parts:
   install-packages:
     plugin: nil
     stage-packages:
+      - rsyslog
       - python3
       - libpython3.12
       # package dependencies
@@ -189,7 +194,6 @@ parts:
       - libnl-genl-3-200
       - libnl-nf-3-200
       - libnl-cli-3-200
-      - socat
 
   install-python:
     plugin: python
@@ -254,7 +258,12 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/files/swss_vars.j2         usr/share/sonic/templates/
       cp ${CRAFT_PROJECT_DIR}/files/readiness_probe.sh   usr/bin/
       cp ${CRAFT_PROJECT_DIR}/files/container_startup.py usr/share/sonic/scripts/
- 
+
+      # common - rsyslog
+      mkdir -p etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/00-load-omprog.conf  etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf         etc/
+
       # common - supervisor config files
       mkdir -p etc/supervisor/conf.d
       mkdir -p var/log/supervisors
@@ -281,3 +290,16 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/rock_init.sh             usr/bin/
       cp ${CRAFT_PROJECT_DIR}/lm-sensors.sh            usr/bin/
       cp ${CRAFT_PROJECT_DIR}/ssd_tools/*              usr/bin/
+
+  add-user:
+    plugin: nil
+    after: [install-common-files]
+
+    overlay-script: |
+      #syslog user
+      groupadd -R $CRAFT_OVERLAY syslog
+      useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
+
+    prime:
+      - etc/passwd
+      - etc/group
