@@ -28,12 +28,16 @@ services:
       IMAGENAME: "docker-snmp"
       DISTRO: "noble"
       LC_CTYPE: "en_US.UTF-8"
-  fake-syslog-socket:
-    command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
+  rsyslogd:
+    command: /usr/sbin/rsyslogd -n -iNONE
     override: replace
     startup: enabled
-    on-success: ignore
-    on-failure: ignore
+  # fake-syslog-socket:
+  #   command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
+  #   override: replace
+  #   startup: enabled
+  #   on-success: ignore
+  #   on-failure: ignore
   snmpd:
     command: /usr/sbin/snmpd -f -LS0-2d -u Debian-snmp -g Debian-snmp -I -smux,mteTrigger,mteTriggerConf,ifTable,ifXTable,inetCidrRouteTable,ipCidrRouteTable,ip,disk_hw -p /run/snmpd.pid
     override: replace
@@ -120,6 +124,7 @@ parts:
   install-packages:
     plugin: nil
     stage-packages:
+      - rsyslog
       - python3
       - libpython3.12
       # docker-lldp specific packages
@@ -145,7 +150,6 @@ parts:
       - libnl-genl-3-200
       - libnl-nf-3-200
       - libnl-cli-3-200
-      - socat
 
   install-python:
     plugin: python
@@ -197,6 +201,11 @@ parts:
       mkdir -p etc/supervisor/conf.d
       mkdir -p var/log/supervisor
 
+      # common - rsyslog
+      mkdir -p etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/00-load-omprog.conf  etc/rsyslog.d/
+      cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf         etc/
+
       cp ${CRAFT_PROJECT_DIR}/files/supervisord.conf     etc/supervisor/
 
       # common - supervisor related
@@ -225,6 +234,10 @@ parts:
     after: [install-common-files]
 
     overlay-script: |
+      #syslog user
+      groupadd -R $CRAFT_OVERLAY syslog
+      useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
+
       #snmp user
       groupadd -R $CRAFT_OVERLAY Debian-snmp
       useradd -R $CRAFT_OVERLAY -M -r --system -g Debian-snmp Debian-snmp
