@@ -139,8 +139,6 @@ parts:
       # Make update script executable
       chmod +x usr/local/bin/update_chassisdb_config
       
-      # Set permission for rsyslog
-      sed -i 's/^$FileGroup adm$/$FileGroup root/' etc/rsyslog.conf
       cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf etc/rsyslog.conf
 
       # Overwrite redis config files
