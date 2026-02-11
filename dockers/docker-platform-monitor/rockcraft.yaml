@@ -29,12 +29,6 @@ services:
     command: /usr/sbin/rsyslogd -n -iNONE
     override: replace
     startup: enabled
-  # fake-syslog-socket:
-  #   command: socat -u UNIX-RECV:/dev/log,mode=666,reuseaddr OPEN:/dev/null,append
-  #   override: replace
-  #   startup: enabled
-  #   on-success: ignore
-  #   on-failure: ignore
   chassis_db_init:
     command: /usr/local/bin/chassis_db_init
     override: replace
@@ -296,7 +290,6 @@ parts:
     after: [install-common-files]
 
     overlay-script: |
-      #syslog user
       groupadd -R $CRAFT_OVERLAY syslog
       useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
 
