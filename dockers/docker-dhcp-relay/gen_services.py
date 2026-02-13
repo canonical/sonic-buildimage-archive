@@ -136,7 +136,7 @@ def gen_dhcpv4_relay_agents(VLAN: Dict[str, Any], VLAN_INTERFACE: Dict[str, Any]
         if not relay_for_ipv4:
             continue
 
-        cmd = ["/usr/sbin/dhcrelay", "-d", "-m", "discard", "-a %%h:%%p", "%%P", "--name-alias-map-file", "/tmp/port-name-alias-map.txt", "-id", vlan_name]
+        cmd = ["/usr/sbin/dhcrelay", "-d", "-m", "discard", "-a %h:%p", "%P", "--name-alias-map-file", "/tmp/port-name-alias-map.txt", "-id", vlan_name]
 
         try:
             md = DEVICE_METADATA or {}
