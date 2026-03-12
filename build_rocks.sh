@@ -39,7 +39,7 @@ do
     cp -r target/debs/noble/*  $rockitem/debs/
     cp -r target/files/noble/* $rockitem/files/
     cp -r target/python-wheels/noble/* $rockitem/python-wheels/
-
+    echo "export IMAGE_VERSION=$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse HEAD)" > $rockitem/envs
     pushd $rockitem
 
     rockname=$(basename $rockitem)
@@ -56,5 +56,5 @@ do
     popd 
 
     docker rmi -f $rockname:latest
-
+    rm $rockitem/envs
 done
