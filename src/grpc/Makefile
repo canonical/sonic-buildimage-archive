@@ -13,7 +13,7 @@ $(addprefix $(DEST)/, $(MAIN_TARGET)): $(DEST)/% :
 	# Remove any stale files
 	rm -rf grpc-$(GRPC_VERSION)
 
-	dget -u grpc_$(GRPC_VERSION_FULL).dsc https://deb.debian.org/debian/pool/main/g/grpc/grpc_$(GRPC_VERSION_FULL).dsc
+	dget -u grpc_$(GRPC_VERSION_FULL).dsc http://deb.debian.org/debian/pool/main/g/grpc/grpc_$(GRPC_VERSION_FULL).dsc
 
 	pushd grpc-$(GRPC_VERSION)
 
