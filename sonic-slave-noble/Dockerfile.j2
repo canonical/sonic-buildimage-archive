@@ -530,7 +530,7 @@ RUN apt-get install -y kernel-wedge > /dev/null
 
 # For Doxygen(SAI)
 RUN apt-get install -y libclang-cpp14 libclang1-14 libllvm14 libxapian30 > /dev/null
-RUN curl -sLO https://archive.ubuntu.com/ubuntu/pool/universe/d/doxygen/doxygen_1.9.1-2ubuntu2_amd64.deb && sudo dpkg -i doxygen_1.9.1-2ubuntu2_amd64.deb
+RUN curl -sLO http://archive.ubuntu.com/ubuntu/pool/universe/d/doxygen/doxygen_1.9.1-2ubuntu2_amd64.deb && sudo dpkg -i doxygen_1.9.1-2ubuntu2_amd64.deb
 
 # For gobgp and telemetry build
 RUN apt-get install -y golang > /dev/null
