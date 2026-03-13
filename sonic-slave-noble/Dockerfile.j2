@@ -38,9 +38,9 @@ ARG PYTHON_CROSS_PLATFORM=linux_aarch64
 {%- endif %}
 
 RUN dpkg --add-architecture $arch
-RUN apt-get update > /dev/null
-RUN apt-get install -y crossbuild-essential-$arch > /dev/null
-RUN apt-get install -y gcc-$gcc_arch > /dev/null
+RUN apt-get update
+RUN apt-get install -y crossbuild-essential-$arch
+RUN apt-get install -y gcc-$gcc_arch
 
 RUN apt-mark hold g++-$gcc_arch
 RUN apt-mark hold g++-10-$gcc_arch
@@ -57,33 +57,33 @@ ENV DEBIAN_FRONTEND=noninteractive
 COPY ["pip.conf", "/etc/pip.conf"]
 
 {%- if CROSS_BUILD_ENVIRON == "y" %}
-RUN apt-get install -y python3 python3-pip > /dev/null
-RUN apt-get install -y python3-minimal:$arch python3.12:$arch python3:$arch python3-dev:$arch python3-setuptools:$arch > /dev/null
+RUN apt-get install -y python3 python3-pip
+RUN apt-get install -y python3-minimal:$arch python3.12:$arch python3:$arch python3-dev:$arch python3-setuptools:$arch
 RUN apt-get download python3-distutils && dpkg --force-all -i python3-distutils*
 RUN apt-get download python3-pip && dpkg --force-all -i python3-pip*
-RUN which pip3 && pip3 install enum34 > /dev/null
-RUN pip3 install virtualenv > /dev/null
+RUN which pip3 && pip3 install enum34
+RUN pip3 install virtualenv
 
 # Create target arm python3 virtual environments with all required packages installed
 RUN mkdir /python_virtualenv
 RUN cd /python_virtualenv && python3 -m virtualenv --copies -p /usr/bin/python3 env3
 
-RUN PATH=/python_virtualenv/env3/bin/:$PATH pip3 install setuptools==66.1.1 setuptools-scm==8.0.4 setuptools-scm-git-archive==1.4.1 wheel==0.38.4 pytest pytest-cov pytest-runner==5.2 nose==1.3.7 mockredispy==2.9.3 mock==3.0.5 PyYAML==6.0.1 redis==3.5.3 pexpect==4.8.0 Pympler==0.8 parameterized natsort==6.2.1 MarkupSafe==2.0.1 Jinja2==3.0.3 click tabulate netaddr netifaces pyroute2 pyfakefs sphinx > /dev/null && ln -s /python_virtualenv/env3/bin/pytest /python_virtualenv/env3/bin/pytest-3
+RUN PATH=/python_virtualenv/env3/bin/:$PATH pip3 install setuptools==66.1.1 setuptools-scm==8.0.4 setuptools-scm-git-archive==1.4.1 wheel==0.38.4 pytest pytest-cov pytest-runner==5.2 nose==1.3.7 mockredispy==2.9.3 mock==3.0.5 PyYAML==6.0.1 redis==3.5.3 pexpect==4.8.0 Pympler==0.8 parameterized natsort==6.2.1 MarkupSafe==2.0.1 Jinja2==3.0.3 click tabulate netaddr netifaces pyroute2 pyfakefs sphinx && ln -s /python_virtualenv/env3/bin/pytest /python_virtualenv/env3/bin/pytest-3
 
 RUN apt-get --fix-broken install -y
-RUN LIBPYTHON3_DEPS="`apt-cache depends libpython3-dev:$arch |grep Depends|awk {'print \$2;'}|tr "\n" " "`" && apt-get install -y libpython2.7-dev:$arch $LIBPYTHON3_DEPS libxml2-dev:$arch libxslt-dev:$arch libssl-dev:$arch libz-dev:$arch > /dev/null
+RUN LIBPYTHON3_DEPS="`apt-cache depends libpython3-dev:$arch |grep Depends|awk {'print \$2;'}|tr "\n" " "`" && apt-get install -y libpython2.7-dev:$arch $LIBPYTHON3_DEPS libxml2-dev:$arch libxslt-dev:$arch libssl-dev:$arch libz-dev:$arch
 
-RUN apt-get install -y swig libssl-dev > /dev/null
+RUN apt-get install -y swig libssl-dev
 
 RUN PATH=/python_virtualenv/env3/bin/:$PATH python3 -m pip install pyang==2.4.0
 RUN PATH=/python_virtualenv/env3/bin/:$PATH python3 -m pip install pyangbind==0.8.2
 RUN PATH=/python_virtualenv/env3/bin/:$PATH python3 -m pip uninstall -y enum34
-RUN PATH=/python_virtualenv/env3/bin/:$PATH pip3 install --force-reinstall --no-cache-dir coverage > /dev/null
+RUN PATH=/python_virtualenv/env3/bin/:$PATH pip3 install --force-reinstall --no-cache-dir coverage
 {%- endif %}
 
 RUN mv /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.save
 
-RUN apt-get update > /dev/null && apt-get install -y \
+RUN apt-get update && apt-get install -y \
         apt-utils \
         default-jre-headless \
         openssh-server \
@@ -457,10 +457,10 @@ RUN apt-get update > /dev/null && apt-get install -y \
         meson \
         python3-pyelftools \
         hwdata \
-        libzip-dev > /dev/null
+        libzip-dev
 
 {%- if CONFIGURED_ARCH != "arm64" and CONFIGURED_ARCH != "armhf" %}
-RUN apt-get update > /dev/null && apt-get install -y \
+RUN apt-get update && apt-get install -y \
 # For grpc
         libgflags-dev                       \
         libgoogle-perftools-dev             \
@@ -496,14 +496,14 @@ RUN apt-get update > /dev/null && apt-get install -y \
         python3-pyroute2 \
         python3-ply \
         python3-scapy \
-        python3-thrift > /dev/null
+        python3-thrift
 {%- endif %}
 
 
 {%- if CROSS_BUILD_ENVIRON == "y" %}
 # Arm vs. amd64 versions conflict - remove amd64 packages
 RUN apt-get remove -y libnl-3-200
-RUN apt-get install -y libpcre3:$arch > /dev/null
+RUN apt-get install -y libpcre3:$arch
 {%- endif %}
 
 RUN apt-get -y build-dep openssh
@@ -525,15 +525,14 @@ RUN sudo augtool --autosave "set /files/etc/dpkg/dpkg.cfg/force-confold"
 # For linux build
 RUN apt-get -y build-dep linux
 {%- else %}
-RUN apt-get install -y kernel-wedge > /dev/null
+RUN apt-get install -y kernel-wedge
 {%- endif %}
 
 # For Doxygen(SAI)
-RUN apt-get install -y libclang-cpp14 libclang1-14 libllvm14 libxapian30 > /dev/null
-RUN curl -sLO https://archive.ubuntu.com/ubuntu/pool/universe/d/doxygen/doxygen_1.9.1-2ubuntu2_amd64.deb && sudo dpkg -i doxygen_1.9.1-2ubuntu2_amd64.deb
-
+RUN apt-get install -y libclang-cpp14 libclang1-14 libllvm14 libxapian30
+RUN curl -sLO http://archive.ubuntu.com/ubuntu/pool/universe/d/doxygen/doxygen_1.9.1-2ubuntu2_amd64.deb && sudo dpkg -i doxygen_1.9.1-2ubuntu2_amd64.deb
 # For gobgp and telemetry build
-RUN apt-get install -y golang > /dev/null
+RUN apt-get install -y golang
 {%- if INCLUDE_FIPS == "y" %}
 # FIPS not yet available
 RUN false
@@ -543,7 +542,7 @@ RUN wget -O golang-go.deb 'https://sonicstorage.blob.core.windows.net/public/fip
  && ln -sf /usr/lib/go-1.15 /usr/local/go \
  && rm golang-go.deb golang-src.deb
 {%- else %}
-RUN apt-get install -y golang-go > /dev/null \
+RUN apt-get install -y golang-go \
  && ln -sf /usr/lib/go-1.22 /usr/local/go
 {%- endif %}
 
@@ -561,62 +560,62 @@ RUN patch -p1 -i /disable-non-manylinux.patch /usr/local/lib/python3.12/dist-pac
 {%- endif %}
 
 # For templates
-RUN pip3 install jinjanator > /dev/null
+RUN pip3 install jinjanator
 
 # For building sonic-utilities
-RUN pip3 install git+https://github.com/ninjaaron/fast-entry_points > /dev/null
-RUN pip3 install mock > /dev/null
+RUN pip3 install git+https://github.com/ninjaaron/fast-entry_points
+RUN pip3 install mock
 
 # For DASH BMv2
-RUN pip3 install jsonpath_ng > /dev/null
+RUN pip3 install jsonpath_ng
 
 # For building sonic_ycabled
 # Note: Match version in 24.04
-RUN pip3 install grpcio==1.65.1 grpcio-tools==1.65.1 > /dev/null
+RUN pip3 install grpcio==1.65.1 grpcio-tools==1.65.1
 
 # For running Python unit tests
-RUN pip3 install pytest-runner==5.2 > /dev/null
-RUN pip3 install mockredispy==2.9.3 > /dev/null
-RUN pip3 install pyfakefs > /dev/null
+RUN pip3 install pytest-runner==5.2
+RUN pip3 install mockredispy==2.9.3
+RUN pip3 install pyfakefs
 
-RUN pip3 install pillow==10.0.0 > /dev/null
+RUN pip3 install pillow==10.0.0
 
 # For p4 build
-RUN pip3 install ctypesgen==1.0.2 crc16 > /dev/null
+RUN pip3 install ctypesgen==1.0.2 crc16
 
 # For sonic config engine testing
 # Install pyangbind here, outside sonic-config-engine dependencies, as pyangbind causes enum34 to be installed.
 # enum34 causes Python 're' package to not work properly as it redefines an incompatible enum.py module
 # https://github.com/robshakir/pyangbind/issues/232
-RUN pip3 install pyangbind==0.8.2 > /dev/null
+RUN pip3 install pyangbind==0.8.2
 RUN pip3 uninstall -y enum34
 
 # For sonic-platform-common testing
-RUN pip3 install redis > /dev/null
-RUN pip3 install psutil > /dev/null
+RUN pip3 install redis
+RUN pip3 install psutil
 
 # For sonic-swss-common testing
-RUN pip3 install Pympler==1.0 > /dev/null
+RUN pip3 install Pympler==1.0
 
 # For sonic_yang_model build
-RUN pip3 install pyang==2.4.0 > /dev/null
+RUN pip3 install pyang==2.4.0
 
 # For mgmt-framework build
 RUN pip3 install mmh3==2.5.1
 
 # For ptf-py3 0.10.0
-RUN pip3 install setuptools==66.1.1 setuptools-scm==8.0.4 setuptools-scm-git-archive==1.4.1 > /dev/null
+RUN pip3 install setuptools==66.1.1 setuptools-scm==8.0.4 setuptools-scm-git-archive==1.4.1
 
-RUN apt-get install -y xsltproc > /dev/null
+RUN apt-get install -y xsltproc
 
 # Install dependencies for isc-dhcp-relay build
 RUN apt-get -y build-dep isc-dhcp
 
 # Install vim
-RUN apt-get install -y vim > /dev/null
+RUN apt-get install -y vim
 
 # Install rsyslog
-RUN apt-get install -y rsyslog > /dev/null
+RUN apt-get install -y rsyslog
 
 {%- if CROSS_BUILD_ENVIRON == "y" %}
 RUN cd /usr/src/gtest && CXX=$CROSS_CXX CC=$CROSS_CC cmake . && make -C /usr/src/gtest
@@ -628,13 +627,13 @@ RUN mkdir /var/run/sshd
 EXPOSE 22
 
 # Install docker engine 24 inside docker and enable experimental feature
-RUN apt-get update > /dev/null
+RUN apt-get update
 RUN apt-get install -y \
            apt-transport-https \
            ca-certificates \
            curl \
            gnupg2 \
-           software-properties-common > /dev/null
+           software-properties-common
 {%- if CONFIGURED_ARCH == "armhf" %}
     RUN update-ca-certificates --fresh
 {%- endif %}
@@ -647,30 +646,30 @@ RUN add-apt-repository \
 {%- endif %}
            $(lsb_release -cs) \
            stable"
-RUN apt-get update > /dev/null
-RUN apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null
+RUN apt-get update
+RUN apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 RUN echo "DOCKER_OPTS=\"--experimental --storage-driver=vfs {{ DOCKER_EXTRA_OPTS }}\"" >> /etc/default/docker
 RUN update-alternatives --set iptables /usr/sbin/iptables-legacy
 
 # Install m2crypto package, needed by SWI tools
-RUN apt-get install python3-m2crypto > /dev/null
+RUN apt-get install python3-m2crypto
 
 # Install libthrift package needed by saithrift
 #RUN apt-get install libthrift-0.19.0 \
 #        libthrift-dev \
 #        thrift-compiler\
-#        python3-thrift > /dev/null
+#        python3-thrift
 
 # Install swi tools
-RUN pip3 install git+https://github.com/aristanetworks/swi-tools.git@bead66bf261770237f7dd21ace3774ba04a017e9 > /dev/null
+RUN pip3 install git+https://github.com/aristanetworks/swi-tools.git@bead66bf261770237f7dd21ace3774ba04a017e9
 
 {% if CONFIGURED_ARCH != "amd64" -%}
 # Install node.js for azure pipeline
 RUN curl -sL https://deb.nodesource.com/setup_14.x | bash -
-RUN apt-get install -y nodejs > /dev/null
+RUN apt-get install -y nodejs
 
 {%- if CROSS_BUILD_ENVIRON == "y" %}
-RUN apt-get install -y rsync dh-python > /dev/null
+RUN apt-get install -y rsync dh-python
 
 RUN apt-get install -y \
         libelf-dev:$arch \
@@ -742,10 +741,10 @@ RUN apt-get install -y \
         qtbase5-dev:$arch \
         libboost-log-dev:$arch \
         libboost-filesystem-dev:$arch \
-        libboost-program-options-dev:$arch > /dev/null
+        libboost-program-options-dev:$arch
 
 RUN apt-get download libgirepository1.0-dev:$arch && dpkg --force-all -i libgirepository1.0-dev*
-RUN PATH=/python_virtualenv/env3/bin/:$PATH pip3 install pycairo > /dev/null
+RUN PATH=/python_virtualenv/env3/bin/:$PATH pip3 install pycairo
 
 # Install libpcsclite-dev for wpasupplicant using download because regular install removes amd64 python package
 RUN apt-get download libpcsclite1:$arch && dpkg --force-all -i libpcsclite1* && apt-get download libpcsclite-dev:$arch && dpkg --force-all -i libpcsclite-dev*
