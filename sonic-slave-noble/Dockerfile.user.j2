@@ -31,4 +31,7 @@ RUN chmod go= /var/$user/.ssh -R
 # Add user to sudoers
 RUN echo "$user ALL=(ALL) NOPASSWD:ALL" >>/etc/sudoers
 
+ADD ./*.deb /tmp/
+RUN apt -y install -f /tmp/*.deb
+
 USER $user
