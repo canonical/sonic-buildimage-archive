@@ -2,7 +2,7 @@
 SHELL = /bin/bash
 .SHELLFLAGS += -e
 
-LIBYANG_URL = https://packages.trafficmanager.net/public/debian/pool/main/liby/libyang
+LIBYANG_URL = http://192.168.10.30/packages.trafficmanager.net/public/debian/pool/main/liby/libyang
 
 DSC_FILE = libyang_$(LIBYANG1_FULLVERSION).dsc
 ORIG_FILE = libyang_$(LIBYANG1_VERSION).orig.tar.gz

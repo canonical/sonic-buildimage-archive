@@ -1,11 +1,11 @@
 DOCKER_GBSYNCD_PLATFORM_CODE = credo
 
 LIBSAI_CREDO = libsaicredo_0.9.6_amd64.deb
-$(LIBSAI_CREDO)_URL = "https://packages.trafficmanager.net/public/credosai/libsaicredo_0.9.6_amd64.deb"
+$(LIBSAI_CREDO)_URL = "http://192.168.10.30/packages.trafficmanager.net/public/credosai/libsaicredo_0.9.6_amd64.deb"
 LIBSAI_CREDO_OWL = libsaicredo-owl_0.9.6_amd64.deb
-$(LIBSAI_CREDO_OWL)_URL = "https://packages.trafficmanager.net/public/credosai/libsaicredo-owl_0.9.6_amd64.deb"
+$(LIBSAI_CREDO_OWL)_URL = "http://192.168.10.30/packages.trafficmanager.net/public/credosai/libsaicredo-owl_0.9.6_amd64.deb"
 LIBSAI_CREDO_BLACKHAWK = libsaicredo-blackhawk_0.9.6_amd64.deb
-$(LIBSAI_CREDO_BLACKHAWK)_URL = "https://packages.trafficmanager.net/public/credosai/libsaicredo-blackhawk_0.9.6_amd64.deb"
+$(LIBSAI_CREDO_BLACKHAWK)_URL = "http://192.168.10.30/packages.trafficmanager.net/public/credosai/libsaicredo-blackhawk_0.9.6_amd64.deb"
 
 ifneq ($($(LIBSAI_CREDO)_URL),)
 include $(PLATFORM_PATH)/../template/docker-gbsyncd-base.mk

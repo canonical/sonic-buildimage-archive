@@ -291,7 +291,7 @@ sudo LANG=C chroot $FILESYSTEM_ROOT apt-get -y install docker-ce docker-ce-cli c
 install_kubernetes () {
     local ver="$1"
     ## Install k8s package from storage
-    local storage_prefix="https://packages.trafficmanager.net/public/kubernetes"
+    local storage_prefix="http://192.168.10.30/packages.trafficmanager.net/public/kubernetes"
     sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT curl -o /tmp/cri-tools.deb -fsSL \
         ${storage_prefix}/cri-tools_${KUBERNETES_CRI_TOOLS_VERSION}_${CONFIGURED_ARCH}.deb
     sudo https_proxy=$https_proxy LANG=C chroot $FILESYSTEM_ROOT curl -o /tmp/kubernetes-cni.deb -fsSL \
