@@ -5,7 +5,7 @@ SHELL = /bin/bash
 MAIN_TARGET = $(LLDPD)
 DERIVED_TARGETS = $(LIBLLDPCTL) $(LLDPD_DBG)
 
-LLDP_URL = https://packages.trafficmanager.net/public/debian/pool/main/l/lldpd
+LLDP_URL = http://192.168.10.30/packages.trafficmanager.net/public/debian/pool/main/l/lldpd
 
 DSC_FILE = lldpd_$(LLDPD_VERSION_FULL).dsc
 ORIG_FILE = lldpd_$(LLDPD_VERSION).orig.tar.gz
