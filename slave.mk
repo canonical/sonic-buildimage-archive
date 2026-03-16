@@ -517,6 +517,41 @@ endef
 $(foreach installer,$(SONIC_INSTALLERS),$(eval $(call rfs_define_target,$(installer))))
 $(foreach installer, $(SONIC_INSTALLERS), $(eval $(installer)_RFS_DEPENDS=$(call rfs_get_installer_dependencies,$(installer))))
 
+# Helper: return items from LIST whose _MACHINE equals MACHINE
+targets_for_machine = $(foreach t,$1,$(if $(filter $2,$($(t)_MACHINE)),$(t)))
+
+# assign_primary_rfs(MACHINE): among RFS targets for a given machine, mark
+# the first as the primary build and set RFS_REUSE_FROM on the rest so they
+# copy its squashfs output instead of running debootstrap again.
+define assign_primary_rfs
+$(eval _primary_rfs_$1 :=)
+$(foreach t,$(call targets_for_machine,$(SONIC_RFS_TARGETS),$1),\
+	$(if $(_primary_rfs_$1),\
+		$(eval $(t)_RFS_REUSE_FROM := $(_primary_rfs_$1)),\
+		$(eval _primary_rfs_$1 := $(t))))
+endef
+
+# Apply assign_primary_rfs for each unique machine
+$(foreach m,\
+	$(sort $(foreach t,$(SONIC_RFS_TARGETS),$($(t)_MACHINE))),\
+	$(call assign_primary_rfs,$m))
+
+# serialize_installers(MACHINE): chain installer targets for a given machine
+# with order-only dependencies so they build sequentially, avoiding races on
+# shared intermediate files (fs.squashfs, fs.zip, etc.).
+define serialize_installers
+$(eval _prev_inst :=)
+$(foreach i,$(call targets_for_machine,$(SONIC_INSTALLERS),$1),\
+	$(if $(_prev_inst),\
+		$(eval $(TARGET_PATH)/$(i): | $(TARGET_PATH)/$(_prev_inst)))\
+		$(eval _prev_inst := $(i)))
+endef
+
+# Apply serialize_installers for each unique machine
+$(foreach m,\
+	$(sort $(foreach i,$(SONIC_INSTALLERS),$($(i)_MACHINE))),\
+	$(call serialize_installers,$m))
+
 SONIC_TARGET_LIST += $(addprefix RFS_TARGETS-$(TARGET_PATH)/, $(SONIC_RFS_TARGETS))
 
 # Overwrite the buildinfo in slave container
@@ -1327,6 +1362,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
         build_debian.sh \
         $(addprefix $(IMAGE_DISTRO_DEBS_PATH)/,$(INITRAMFS_TOOLS) $(LINUX_KERNEL)) \
         $$(addprefix $(TARGET_PATH)/,$$($$*_DEPENDENT_RFS)) \
+        $$(if $$($$*_RFS_REUSE_FROM),$$(addprefix $(TARGET_PATH)/,$$($$*_RFS_REUSE_FROM))) \
         $(call dpkg_depend,$(TARGET_PATH)/%.dep)
 	$(HEADER)
 
@@ -1334,6 +1370,11 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
 
 	# Skip building the target if it is already loaded from cache
 	if [ -z '$($*_CACHE_LOADED)' ] ; then
+
+	# If another RFS with the same machine was already built, reuse it
+	if [ -n '$($*_RFS_REUSE_FROM)' ] && [ -f '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' ]; then
+		sudo cp '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' '$@'
+	else
 
 		$(eval installer=$($*_INSTALLER))
 		$(eval machine=$($*_MACHINE))
@@ -1370,6 +1411,8 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
 		MASTER_KUBERNETES_VERSION=$(MASTER_KUBERNETES_VERSION) \
 		MASTER_CRI_DOCKERD=$(MASTER_CRI_DOCKERD) \
 			./build_debian.sh $(LOG)
+
+	fi
 
 		$(call SAVE_CACHE,$*,$@)
 
