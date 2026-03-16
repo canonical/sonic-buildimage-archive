@@ -137,14 +137,10 @@ parts:
       - jinjanator
       # docker-dhcp-relay specific packages
       - click
-      - supervisor==4.2.5
-      - supervisord-dependent-startup==1.4.0
       - psutil
       - lxml
     stage-packages:
       - python3-venv
-    organize:
-      bin/supervisord: usr/local/bin/supervisord
 
   install-common-files:
     plugin: nil
@@ -167,20 +163,11 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/files/00-load-omprog.conf  etc/rsyslog.d/
       cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf         etc/
 
-      # common - supervisor config files
-      mkdir -p etc/supervisor/conf.d
-      mkdir -p var/log/supervisor
-
-      cp ${CRAFT_PROJECT_DIR}/files/supervisord.conf     etc/supervisor/
-
       # common - supervisor related
       mkdir -p usr/share/sonic/templates
-      cp ${CRAFT_PROJECT_DIR}/docker-dhcp-relay.supervisord.conf.j2     usr/share/sonic/templates/
-      cp ${CRAFT_PROJECT_DIR}/critical_processes      etc/supervisor/
 
       mkdir -p etc/sysctl.d/
       cp ${CRAFT_PROJECT_DIR}/files/sysctl-net.conf               etc/sysctl.d/
-      cp ${CRAFT_PROJECT_DIR}/files/supervisor-proc-exit-listener usr/bin/
       cp ${CRAFT_PROJECT_DIR}/files/syslog-layer.yaml             usr/share/sonic/templates/
 
       # docker-dhcp-relay specifc
