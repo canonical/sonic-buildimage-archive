@@ -25,6 +25,19 @@
 ## Include common functions
 . functions.sh
 
+## Unmount all mounts under and including FILESYSTEM_ROOT, deepest first.
+## This handles leftover docker overlay2 mounts, proc, sys, and bind mounts.
+cleanup_fsroot_mounts() {
+    local root
+    root=$(readlink -f "$FILESYSTEM_ROOT" 2>/dev/null) || root="$FILESYSTEM_ROOT"
+    [ -n "$root" ] || return 0
+    local mounts
+    mounts=$(awk -v root="$root" '$2 == root || $2 ~ "^"root"/" {print $2}' /proc/mounts | sort -r)
+    for mnt in $mounts; do
+        sudo umount "$mnt" 2>/dev/null || sudo umount -l "$mnt" 2>/dev/null || true
+    done
+}
+
 ## Enable debug output for script
 set -x -e
 
@@ -639,6 +652,9 @@ if [[ $RFS_SPLIT_LAST_STAGE == y ]]; then
     ## ensure proc is mounted
     sudo mount proc /proc -t proc || true
 
+    ## Clean up any stale mounts from a previous failed build
+    cleanup_fsroot_mounts
+
     sudo fuser -vm $FILESYSTEM_ROOT || true
     sudo rm -rf $FILESYSTEM_ROOT
     sudo unsquashfs -d $FILESYSTEM_ROOT $TARGET_PATH/$RFS_SQUASHFS_NAME
@@ -648,6 +664,7 @@ if [[ $RFS_SPLIT_LAST_STAGE == y ]]; then
     sudo mount --bind . .
     popd
 
+    trap_push cleanup_fsroot_mounts
     trap_push 'sudo LANG=C chroot $FILESYSTEM_ROOT umount /proc || true'
     sudo LANG=C chroot $FILESYSTEM_ROOT mount proc /proc -t proc
 fi
@@ -826,6 +843,9 @@ sudo LANG=C chroot $FILESYSTEM_ROOT fuser -vm /proc
 sudo LANG=C chroot $FILESYSTEM_ROOT fuser -km /proc || true
 ## Wait fuser fully kill the processes
 sudo timeout 15s bash -c 'until LANG=C chroot $0 umount /proc; do sleep 1; done' $FILESYSTEM_ROOT || true
+
+## Umount all mounts under FILESYSTEM_ROOT (docker overlay2, bind mount, etc.)
+cleanup_fsroot_mounts
 
 ## Prepare empty directory to trigger mount move in initramfs-tools/mount_loop_root, implemented by patching
 sudo mkdir $FILESYSTEM_ROOT/host

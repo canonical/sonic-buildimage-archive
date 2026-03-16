@@ -517,6 +517,24 @@ endef
 $(foreach installer,$(SONIC_INSTALLERS),$(eval $(call rfs_define_target,$(installer))))
 $(foreach installer, $(SONIC_INSTALLERS), $(eval $(installer)_RFS_DEPENDS=$(call rfs_get_installer_dependencies,$(installer))))
 
+# For RFS targets sharing the same machine, pick one as the canonical build
+# and have the rest simply copy its squashfs output. This avoids redundant
+# debootstrap runs (the expensive part) while preventing race conditions.
+# Also serialize installer targets sharing the same machine to prevent race
+# conditions on shared intermediate files (fs.squashfs, fs.zip, etc.).
+$(foreach m,$(sort $(foreach t,$(SONIC_RFS_TARGETS),$($(t)_MACHINE))),\
+  $(eval _canonical_rfs_$(m) :=)\
+  $(foreach t,$(filter $(foreach tt,$(SONIC_RFS_TARGETS),$(if $(filter $m,$($(tt)_MACHINE)),$(tt))),$(SONIC_RFS_TARGETS)),\
+    $(if $(_canonical_rfs_$(m)),\
+      $(eval $(t)_RFS_REUSE_FROM := $(_canonical_rfs_$(m))),\
+      $(eval _canonical_rfs_$(m) := $(t)))))
+
+$(foreach m,$(sort $(foreach i,$(SONIC_INSTALLERS),$($(i)_MACHINE))),\
+  $(eval _prev_inst :=)\
+  $(foreach i,$(filter $(foreach ii,$(SONIC_INSTALLERS),$(if $(filter $m,$($(ii)_MACHINE)),$(ii))),$(SONIC_INSTALLERS)),\
+    $(if $(_prev_inst),$(eval $(TARGET_PATH)/$(i): | $(TARGET_PATH)/$(_prev_inst)))\
+    $(eval _prev_inst := $(i))))
+
 SONIC_TARGET_LIST += $(addprefix RFS_TARGETS-$(TARGET_PATH)/, $(SONIC_RFS_TARGETS))
 
 # Overwrite the buildinfo in slave container
@@ -1327,6 +1345,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
         build_debian.sh \
         $(addprefix $(IMAGE_DISTRO_DEBS_PATH)/,$(INITRAMFS_TOOLS) $(LINUX_KERNEL)) \
         $$(addprefix $(TARGET_PATH)/,$$($$*_DEPENDENT_RFS)) \
+        $$(if $$($$*_RFS_REUSE_FROM),$$(addprefix $(TARGET_PATH)/,$$($$*_RFS_REUSE_FROM))) \
         $(call dpkg_depend,$(TARGET_PATH)/%.dep)
 	$(HEADER)
 
@@ -1334,6 +1353,11 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
 
 	# Skip building the target if it is already loaded from cache
 	if [ -z '$($*_CACHE_LOADED)' ] ; then
+
+	# If another RFS with the same machine was already built, reuse it
+	if [ -n '$($*_RFS_REUSE_FROM)' ] && [ -f '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' ]; then
+		sudo cp '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' '$@'
+	else
 
 		$(eval installer=$($*_INSTALLER))
 		$(eval machine=$($*_MACHINE))
@@ -1370,6 +1394,8 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
 		MASTER_KUBERNETES_VERSION=$(MASTER_KUBERNETES_VERSION) \
 		MASTER_CRI_DOCKERD=$(MASTER_CRI_DOCKERD) \
 			./build_debian.sh $(LOG)
+
+	fi
 
 		$(call SAVE_CACHE,$*,$@)
 
