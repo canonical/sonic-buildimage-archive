@@ -150,11 +150,6 @@ parts:
     source-type: deb
     source: ./debs/ipmitool_1.8.19-9_amd64.deb
 
-  install-socat:
-    plugin: dump
-    source-type: deb
-    source: ./debs/socat_1.7.4.1-3_amd64.deb
-
   install-packages:
     plugin: nil
     stage-packages:

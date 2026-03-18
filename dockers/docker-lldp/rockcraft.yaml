@@ -99,25 +99,20 @@ parts:
     source-type: deb
     source: ./debs/sonic-eventd_1.0.0-0_amd64.deb
 
-  install-libsnmp40t64_5.9.4:
+  install-libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.1_amd64:
     plugin: dump
     source-type: deb
-    source: ./debs/libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.2_amd64.deb
+    source: ./debs/libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.1_amd64.deb
 
-  install-libsnmp-base_5.9.4:
+  install-libsnmp-base_5.9.4+dfsg-1.1ubuntu3.1_all:
     plugin: dump
     source-type: deb
-    source: ./debs/libsnmp-base_5.9.4+dfsg-1.1ubuntu3.2_all.deb
+    source: ./debs/libsnmp-base_5.9.4+dfsg-1.1ubuntu3.1_all.deb
 
   install-lldpd_1.0.16-1+deb12u1_amd64.deb:
     plugin: dump
     source-type: deb
     source: ./debs/lldpd_1.0.16-1+deb12u1_amd64.deb
-
-  install-socat:
-    plugin: dump
-    source-type: deb
-    source: ./debs/socat_1.7.4.1-3_amd64.deb
 
   install-packages:
     plugin: nil
@@ -147,6 +142,7 @@ parts:
       - libnl-genl-3-200
       - libnl-nf-3-200
       - libnl-cli-3-200
+      - socat
 
   install-python:
     plugin: python
