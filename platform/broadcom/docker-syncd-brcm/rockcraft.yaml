@@ -189,3 +189,4 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/files/bcmcmd            usr/bin/
       cp ${CRAFT_PROJECT_DIR}/start.sh                usr/bin/
       cp ${CRAFT_PROJECT_DIR}/start_led.sh            usr/bin/
+      cp ${CRAFT_PROJECT_DIR}/bcmsh                   usr/bin/
