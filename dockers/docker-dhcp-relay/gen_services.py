@@ -9,7 +9,6 @@ import tempfile
 from typing import Dict, Any, Iterable, Tuple
 
 LAYER_NAME = "dynamic_services"
-TMP_CONFIG_FILE_PATH = "/tmp/pebble_dynamic_services.yaml"
 
 def get_start_order(svc_name: list[str]) -> tuple[list[str], list[str]]:
     first_pass, second_pass = [], []
