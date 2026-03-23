@@ -1198,7 +1198,8 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 			$(shell [[ ! -z "$($(component)_VERSION)" && ! -z "$($(component)_NAME)" ]] && \
 				echo "--label com.azure.sonic.versions.$($(component)_NAME)=$($(component)_VERSION)")))
 		if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
-			# Rock mode: placeholder .gz for make dependency tracking
+			# Rock mode: generate manifest.json, then placeholder .gz for make dependency tracking
+			$(call generate_manifest,$*)
 			cp $(ROCK_PLACEHOLDER_GZ) $@
 			echo $@ >> $(TARGET_PATH)/.rock-needed
 		else
