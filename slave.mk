@@ -1373,7 +1373,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_RFS_TARGETS)) : $(TARGET_PATH)/% : \
 
 	# If another RFS with the same machine was already built, reuse it
 	if [ -n '$($*_RFS_REUSE_FROM)' ] && [ -f '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' ]; then
-		sudo cp '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' '$@'
+		ln -s '$(TARGET_PATH)/$($*_RFS_REUSE_FROM)' '$@'
 	else
 
 		$(eval installer=$($*_INSTALLER))
