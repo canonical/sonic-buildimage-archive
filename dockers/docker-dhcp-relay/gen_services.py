@@ -5,6 +5,7 @@ import subprocess
 import sys
 import ipaddress
 import yaml
+import tempfile
 from typing import Dict, Any, Iterable, Tuple
 
 LAYER_NAME = "dynamic_services"
@@ -22,9 +23,10 @@ def get_start_order(svc_name: list[str]) -> tuple[list[str], list[str]]:
 
 
 def add_layer_and_replan(pebble_conf: Dict[str, Any]) -> None:
-    with open(TMP_CONFIG_FILE_PATH, "w") as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="pebble_dynamic_services_", delete=False) as f:
         yaml.dump(pebble_conf, f, width=float("inf"))
-    cmd_add = ["pebble", "add", LAYER_NAME, "--combine", TMP_CONFIG_FILE_PATH]
+        temp_path = f.name
+    cmd_add = ["pebble", "add", LAYER_NAME, "--combine", temp_path]
     subprocess.run(cmd_add, check=True)
     cmd_reload = ["pebble", "replan"]
     subprocess.run(cmd_reload, check=True)
