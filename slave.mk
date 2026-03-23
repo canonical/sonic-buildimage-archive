@@ -326,6 +326,12 @@ DOCKER_IMAGE_REF = $*-$(DOCKER_USERNAME):$(DOCKER_USERTAG)
 DOCKER_DBG_IMAGE_REF = $*-$(DBG_IMAGE_MARK)-$(DOCKER_USERNAME):$(DOCKER_USERTAG)
 export DOCKER_USERNAME DOCKER_USERTAG
 
+# Minimal placeholder docker image .gz for rock targets (generated once, copied per target)
+ROCK_PLACEHOLDER_GZ = $(TARGET_PATH)/.rock-placeholder.gz
+ifeq ($(USE_ROCK_CONTAINER),y)
+ROCK_PLACEHOLDER_DEP = $(ROCK_PLACEHOLDER_GZ)
+endif
+
 ifeq ($(VS_PREPARE_MEM),)
 override VS_PREPARE_MEM := $(DEFAULT_VS_PREPARE_MEM)
 endif
@@ -1030,6 +1036,12 @@ docker-start :
 	            echo \"export no_proxy=$$no_proxy\"; } >> /etc/default/docker"
 	$(Q)test x$(SONIC_CONFIG_USE_NATIVE_DOCKERD_FOR_BUILD) != x"y" && sudo service docker status &> /dev/null || ( sudo service docker start &> /dev/null && ./scripts/wait_for_docker.sh 60 )
 
+# Minimal placeholder docker image .gz for rock targets (generated once, copied per target)
+$(ROCK_PLACEHOLDER_GZ) : docker-start
+	tar c --files-from /dev/null | docker import - rock-placeholder:latest
+	docker save rock-placeholder:latest | pigz -c > $@
+	docker rmi -f rock-placeholder:latest 2>/dev/null || true
+
 # targets for building simple docker images that do not depend on any debian packages
 $(addprefix $(TARGET_PATH)/, $(SONIC_SIMPLE_DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform docker-start $$(addsuffix -load,$$(addprefix $(TARGET_PATH)/,$$($$*.gz_LOAD_DOCKERS)))
 	$(HEADER)
@@ -1134,6 +1146,7 @@ $(addprefix $(TARGET_PATH)/,$(DOWNLOADED_DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz :
 
 # Targets for building docker images
 $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform docker-start \
+		$(ROCK_PLACEHOLDER_DEP) \
 		$$(addprefix $$($$*.gz_DEBS_PATH)/,$$($$*.gz_DEPENDS)) \
 		$$(addprefix $(TARGET_PATH)/,$$($$*.gz_AFTER)) \
 		$$(addprefix $$($$*.gz_FILES_PATH)/,$$($$*.gz_FILES)) \
@@ -1185,18 +1198,9 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 			$(shell [[ ! -z "$($(component)_VERSION)" && ! -z "$($(component)_NAME)" ]] && \
 				echo "--label com.azure.sonic.versions.$($(component)_NAME)=$($(component)_VERSION)")))
 		if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
-			# Rock build mode: copy extra files needed by rockcraft
-			cp -f files/rsyslog/00-load-omprog.conf $($*.gz_PATH)/files/
-			cp -f files/rsyslog/rsyslog.conf $($*.gz_PATH)/files/
-			cp -f files/supervisor/supervisord.conf $($*.gz_PATH)/files/
-			cp -f files/build_templates/syslog-layer.yaml $($*.gz_PATH)/files/
-			pushd $($*.gz_PATH)
-			rockname=$$(basename $($*.gz_PATH))
-			rockfullname="$${rockname}_1.0.0_$(CONFIGURED_ARCH).rock"
-			rockcraft clean $(LOG)
-			rockcraft pack $(LOG)
-			sudo rockcraft.skopeo --insecure-policy copy oci-archive:$${rockfullname} docker-daemon:$(DOCKER_IMAGE_REF) $(LOG)
-			popd
+			# Rock mode: placeholder .gz for make dependency tracking
+			cp $(ROCK_PLACEHOLDER_GZ) $@
+			echo $@ >> $(TARGET_PATH)/.rock-needed
 		else
 			# Traditional Docker build mode
 			j2 $($*.gz_PATH)/Dockerfile.j2 > $($*.gz_PATH)/Dockerfile
@@ -1232,9 +1236,9 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 				DBGOPT='$(DBGOPT)' \
 				scripts/collect_docker_version_files.sh $* $(TARGET_PATH) $(DOCKER_IMAGE_REF) $($*.gz_PATH) $($*.gz_PATH)/Dockerfile $(LOG)
 			if [ ! -z $(filter $*.gz,$(SONIC_PACKAGES_LOCAL)) ]; then docker tag $(DOCKER_IMAGE_REF) $*:$(SONIC_IMAGE_VERSION); fi
-		fi
 
-		$(call docker-image-save,$*,$@)
+			$(call docker-image-save,$*,$@)
+		fi
 
 		# Clean up
 		if [ -f $($*.gz_PATH).patch/series ]; then pushd $($*.gz_PATH) && quilt pop -a -f; [ -d .pc ] && rm -rf .pc; popd; fi
@@ -1249,11 +1253,17 @@ SONIC_TARGET_LIST += $(addprefix DOCKER_IMAGES-$(TARGET_PATH)/, $(DOCKER_IMAGES)
 
 # Targets for building docker debug images
 $(addprefix $(TARGET_PATH)/, $(DOCKER_DBG_IMAGES)) : $(TARGET_PATH)/%-$(DBG_IMAGE_MARK).gz : .platform docker-start \
+		$(ROCK_PLACEHOLDER_DEP) \
 		$$(addprefix $(TARGET_PATH)/,$$($$*.gz_AFTER)) \
 		$$(addprefix $$($$*.gz_DEBS_PATH)/,$$($$*.gz_DBG_DEPENDS)) \
 		$$(addsuffix -load,$$(addprefix $(TARGET_PATH)/,$$*.gz)) \
 		$(call dpkg_depend,$(TARGET_PATH)/%-$(DBG_IMAGE_MARK).gz.dep)
 	$(HEADER)
+
+	if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+		# Rock mode: placeholder .gz for make dependency tracking
+		cp $(ROCK_PLACEHOLDER_GZ) $@
+	else
 
 	# Load the target deb from DPKG cache
 	$(call LOAD_CACHE,$*-$(DBG_IMAGE_MARK).gz,$@)
@@ -1308,6 +1318,8 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_DBG_IMAGES)) : $(TARGET_PATH)/%-$(DBG_IMAG
 		$(call SAVE_CACHE,$*-$(DBG_IMAGE_MARK).gz,$@)
 	fi
 
+	fi
+
 	$(FOOTER)
 
 SONIC_TARGET_LIST += $(addprefix DOCKER_DBG_IMAGES-$(TARGET_PATH)/, $(DOCKER_DBG_IMAGES))
@@ -1329,7 +1341,11 @@ endif
 
 $(DOCKER_LOAD_TARGETS) : $(TARGET_PATH)/%.gz-load : .platform docker-start $$(TARGET_PATH)/$$*.gz
 	$(HEADER)
+	if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+		echo "Rock mode: skipping docker load for $*"
+	else
 	$(call docker-image-load,$*)
+	fi
 	$(FOOTER)
 
 ###############################################################################
@@ -1449,6 +1465,9 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_INSTALLERS)) : $(TARGET_PATH)/% : \
         $$(addprefix $(TARGET_PATH)/,$$($$*_RFS_DEPENDS))
 
 	$(HEADER)
+ifeq ($(ROCK_PREP_ONLY),y)
+	@echo "Rock prep pass: skipping installer build"
+else
 	# Pass initramfs and linux kernel explicitly. They are used for all platforms
 	export debs_path="$(IMAGE_DISTRO_DEBS_PATH)"
 	export files_path="$(FILES_PATH)"
@@ -1474,7 +1493,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_INSTALLERS)) : $(TARGET_PATH)/% : \
 	export include_system_gnmi="$(INCLUDE_SYSTEM_GNMI)"
 	export include_system_eventd="$(INCLUDE_SYSTEM_EVENTD)"
 	export build_reduce_image_size="$(BUILD_REDUCE_IMAGE_SIZE)"
-	export process_manager=$(if $(filter y,$(USE_ROCK_CONTAINER)),pebble,supervisord)
+	export process_manager=supervisord
 	export include_restapi="$(INCLUDE_RESTAPI)"
 	export include_nat="$(INCLUDE_NAT)"
 	export include_p4rt="$(INCLUDE_P4RT)"
@@ -1567,6 +1586,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_INSTALLERS)) : $(TARGET_PATH)/% : \
 			)
 		fi
 
+		if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($(docker:-dbg.gz=.gz)_PATH)/rockcraft.yaml ]; then export process_manager=pebble; else export process_manager=supervisord; fi
 		j2 files/build_templates/docker_image_ctl.j2 > $($(docker:-dbg.gz=.gz)_CONTAINER_NAME).sh
 		chmod +x $($(docker:-dbg.gz=.gz)_CONTAINER_NAME).sh
 
@@ -1679,6 +1699,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_INSTALLERS)) : $(TARGET_PATH)/% : \
 	)
 
 	chmod a+x $@
+endif
 	$(FOOTER)
 
 SONIC_TARGET_LIST += $(addprefix INSTALLERS-$(TARGET_PATH)/, $(SONIC_INSTALLERS))

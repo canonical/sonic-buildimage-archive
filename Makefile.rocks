@@ -1,0 +1,75 @@
+# Makefile.rocks - Build rock (OCI) images using rockcraft
+# Called from Makefile.work with: make -f Makefile.rocks -j$(SONIC_BUILD_JOBS) rock-build
+#
+# Auto-discovers all rockcraft.yaml files under dockers/ and platform/
+# and builds them in parallel via make -j.
+
+SHELL := /bin/bash
+
+# Auto-discover all directories containing rockcraft.yaml
+ROCK_YAML_FILES := $(shell find dockers platform -name rockcraft.yaml 2>/dev/null)
+ROCK_DIRS := $(patsubst %/rockcraft.yaml,%,$(ROCK_YAML_FILES))
+ROCK_NAMES := $(foreach d,$(ROCK_DIRS),$(notdir $(d)))
+ROCK_TARGETS := $(foreach name,$(ROCK_NAMES),target/$(name).gz)
+
+# Map rock name back to its source directory
+# e.g. docker-database -> dockers/docker-database
+#      docker-syncd-brcm -> platform/broadcom/docker-syncd-brcm
+define rock-dir
+$(firstword $(foreach d,$(ROCK_DIRS),$(if $(filter $(1),$(notdir $(d))),$(d))))
+endef
+
+# Common files to copy into target/files/noble/ before building
+COMMON_FILES := files/rsyslog/00-load-omprog.conf \
+                files/rsyslog/rsyslog.conf \
+                files/supervisor/supervisord.conf \
+                files/build_templates/syslog-layer.yaml
+
+IMAGE_VERSION := $(shell git rev-parse --abbrev-ref HEAD)-$(shell git rev-parse HEAD)
+
+# ROCK_FILTER: passed from Makefile.work as the make target ($@)
+# - "all" or installer target (sonic-*.img.gz) → build all rocks
+# - "target/docker-xxx.gz" → build only that rock (if it has rockcraft.yaml)
+# - unset → build all rocks
+ifneq ($(filter target/docker-%.gz,$(ROCK_FILTER)),)
+  # Specific docker target: only build if it's a known rock
+  ROCK_EFFECTIVE_TARGETS := $(filter $(ROCK_FILTER),$(ROCK_TARGETS))
+else
+  # "all", installer, or unset: build everything
+  ROCK_EFFECTIVE_TARGETS := $(ROCK_TARGETS)
+endif
+
+.PHONY: rock-build rock-prep rock-clean
+rock-build: $(ROCK_EFFECTIVE_TARGETS)
+
+rock-clean:
+	@for d in $(ROCK_DIRS); do \
+		cd $$d && rockcraft clean 2>/dev/null; cd $(CURDIR); \
+		rm -rf $$d/debs $$d/files $$d/python-wheels $$d/envs $$d/*.rock; \
+	done
+	rm -f $(ROCK_TARGETS)
+
+rock-prep:
+	@mkdir -p target/files/noble
+	@cp files/rsyslog/00-load-omprog.conf target/files/noble/
+	@cp files/rsyslog/rsyslog.conf target/files/noble/
+	@cp files/supervisor/supervisord.conf target/files/noble/
+	@cp files/build_templates/syslog-layer.yaml target/files/noble/
+
+# Generic rule: build a rock and produce target/<name>.gz
+# Each target runs independently, so make -j can parallelize them.
+target/%.gz: rock-prep
+	$(eval ROCK_SRC := $(call rock-dir,$*))
+	@echo "=== Building rock: $* from $(ROCK_SRC) ==="
+	@mkdir -p $(ROCK_SRC)/debs $(ROCK_SRC)/files $(ROCK_SRC)/python-wheels
+	@cp -r target/debs/noble/* $(ROCK_SRC)/debs/
+	@cp -r target/files/noble/* $(ROCK_SRC)/files/
+	@cp -r target/python-wheels/noble/* $(ROCK_SRC)/python-wheels/
+	@echo "export IMAGE_VERSION=$(IMAGE_VERSION)" > $(ROCK_SRC)/envs
+	cd $(ROCK_SRC) && rockcraft clean && rockcraft pack
+	@rock_file=$$(ls $(ROCK_SRC)/*_amd64.rock 2>/dev/null | head -1); \
+	sudo rockcraft.skopeo --insecure-policy copy oci-archive:$$rock_file docker-daemon:$*:latest
+	@docker save $*:latest | pigz -c > $@
+	@docker rmi -f $*:latest 2>/dev/null || true
+	@rm -rf $(ROCK_SRC)/debs $(ROCK_SRC)/files $(ROCK_SRC)/python-wheels $(ROCK_SRC)/envs
+	@echo "=== Done: $@ ==="
