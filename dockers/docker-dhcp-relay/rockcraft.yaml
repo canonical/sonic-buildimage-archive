@@ -204,7 +204,6 @@ parts:
     after: [install-common-files]
 
     overlay-script: |
-      #syslog user
       groupadd -R $CRAFT_OVERLAY syslog
       useradd -R $CRAFT_OVERLAY -M -r --system -g adm syslog
 

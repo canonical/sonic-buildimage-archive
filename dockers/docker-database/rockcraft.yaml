@@ -12,6 +12,10 @@ platforms:
   amd64:
 
 services:
+  rsyslogd:
+    command: /usr/sbin/rsyslogd -n -iNONE
+    override: replace
+    startup: enabled
   init:
     command: rock-database-init.sh
     override: replace
@@ -77,6 +81,7 @@ parts:
       database_global.json.j2: usr/share/sonic/templates/database_global.json.j2
       files/syslog-layer.yaml: usr/share/sonic/templates/
       rock-database-init.sh: usr/local/bin/rock-database-init.sh
+      files/00-load-omprog.conf: etc/rsyslog.d/00-load-omprog.conf
       files/container_startup.py: usr/share/sonic/scripts/container_startup.py
       files/readiness_probe.sh: usr/bin/readiness_probe.sh
       files/swss_vars.j2: usr/share/sonic/templates/swss_vars.j2
@@ -105,6 +110,7 @@ parts:
       - procps_bins
       - coreutils_bins
       - gawk_bins
+      - rsyslog_bins
       - redis-server_bins
       - iproute2_bins
       - libhiredis1.1.0_libs
@@ -132,6 +138,8 @@ parts:
 
       # Make update script executable
       chmod +x usr/local/bin/update_chassisdb_config
+      
+      cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf etc/rsyslog.conf
 
       # Overwrite redis config files
       cp ${CRAFT_PROJECT_DIR}/redis.conf etc/redis/
