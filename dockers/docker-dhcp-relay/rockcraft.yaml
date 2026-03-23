@@ -17,26 +17,18 @@ platforms:
 
 services:
   init:
-    command: bash -c "/usr/bin/rock_init.sh && touch /tmp/init_ok"
+    command: /usr/bin/rock_init.sh
     override: replace
     startup: enabled
     on-success: ignore
-  rsyslogd:
-    command: bash -c "test -f /tmp/init_ok && exec /usr/sbin/rsyslogd -n -iNONE"
-    override: replace
-    startup: enabled
-  start:
-    command: bash -c "/usr/bin/start.sh && touch /tmp/start_ok"
-    override: replace
-    startup: enabled
-    after: [ rsyslogd ]
-    on-success: ignore
-    on-failure: restart
+    on-failure: ignore
+    environment:
+      DEBIAN_FRONTEND: "noninteractive"
+      IMAGENAME: "docker-dhcp-relay"
+      DISTRO: "noble"
   dhcprelayd:
-    command: bash -c "test -f /tmp/zsocket_ok && exec /usr/local/bin/dhcprelayd"
+    command: dhcprelayd
     override: replace
-    startup: enabled
-    after: [ rsyslogd ]
 
 # For meeting requirement R2, simply don't specify any entrypoint (aka "services")
 
@@ -97,6 +89,11 @@ parts:
     source-type: deb
     source: ./debs/sonic-rsyslog-plugin_1.0.0-0_amd64.deb
 
+  install-socat:
+    plugin: dump
+    source-type: deb
+    source: ./debs/socat_1.7.4.1-3_amd64.deb
+
   install-packages:
     plugin: nil
     stage-packages:
@@ -119,6 +116,7 @@ parts:
       - libnl-genl-3-200
       - libnl-nf-3-200
       - libnl-cli-3-200
+      - explain
 
   install-python:
     plugin: python
@@ -135,14 +133,10 @@ parts:
       - jinjanator
       # docker-dhcp-relay specific packages
       - click
-      - supervisor==4.2.5
-      - supervisord-dependent-startup==1.4.0
       - psutil
       - lxml
     stage-packages:
       - python3-venv
-    organize:
-      bin/supervisord: usr/local/bin/supervisord
 
   install-common-files:
     plugin: nil
@@ -165,26 +159,19 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/files/00-load-omprog.conf  etc/rsyslog.d/
       cp ${CRAFT_PROJECT_DIR}/files/rsyslog.conf         etc/
 
-      # common - supervisor config files
-      mkdir -p etc/supervisor/conf.d
-      mkdir -p var/log/supervisor
-
-      cp ${CRAFT_PROJECT_DIR}/files/supervisord.conf     etc/supervisor/
-
       # common - supervisor related
       mkdir -p usr/share/sonic/templates
-      cp ${CRAFT_PROJECT_DIR}/docker-dhcp-relay.supervisord.conf.j2     usr/share/sonic/templates/
-      cp ${CRAFT_PROJECT_DIR}/critical_processes      etc/supervisor/
 
       mkdir -p etc/sysctl.d/
       cp ${CRAFT_PROJECT_DIR}/files/sysctl-net.conf               etc/sysctl.d/
-      cp ${CRAFT_PROJECT_DIR}/files/supervisor-proc-exit-listener usr/bin/
+      cp ${CRAFT_PROJECT_DIR}/files/syslog-layer.yaml             usr/share/sonic/templates/
 
       # docker-dhcp-relay specifc
       mkdir -p usr/bin
       cp ${CRAFT_PROJECT_DIR}/docker_init.sh          usr/bin/
       cp ${CRAFT_PROJECT_DIR}/rock_init.sh            usr/bin/
       cp ${CRAFT_PROJECT_DIR}/start.sh                usr/bin/
+      cp ${CRAFT_PROJECT_DIR}/gen_services.py         usr/bin/
 
       cp ${CRAFT_PROJECT_DIR}/port-name-alias-map.txt.j2  usr/share/sonic/templates/
       cp ${CRAFT_PROJECT_DIR}/wait_for_intf.sh.j2         usr/share/sonic/templates/
@@ -192,6 +179,7 @@ parts:
       cp ${CRAFT_PROJECT_DIR}/dhcpv4-relay.agents.j2      usr/share/sonic/templates/
       cp ${CRAFT_PROJECT_DIR}/dhcpv6-relay.agents.j2      usr/share/sonic/templates/
       cp ${CRAFT_PROJECT_DIR}/dhcp-relay.monitors.j2      usr/share/sonic/templates/
+      cp ${CRAFT_PROJECT_DIR}/envs                        usr/share/sonic/templates/
 
       mkdir -p cli
       cp -r ${CRAFT_PROJECT_DIR}/cli/*                    cli/
