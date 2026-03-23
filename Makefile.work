@@ -583,6 +583,7 @@ SONIC_BUILD_INSTRUCTION :=  $(MAKE) \
                            PIP_HTTP_TIMEOUT=$(PIP_HTTP_TIMEOUT) \
                            BUILD_PROCESS_TIMEOUT=$(BUILD_PROCESS_TIMEOUT) \
                            BUILD_SKIP_TEST=$(BUILD_SKIP_TEST) \
+                           USE_ROCK_CONTAINER=$(USE_ROCK_CONTAINER) \
                            LEGACY_SONIC_MGMT_DOCKER=$(LEGACY_SONIC_MGMT_DOCKER) \
                            SONIC_PTF_ENV_PY_VER=$(SONIC_PTF_ENV_PY_VER) \
                            $(SONIC_OVERRIDE_BUILD_VARS)
@@ -621,9 +622,80 @@ endif
 	$(Q)$(SONIC_SLAVE_BASE_BUILD)
 	$(Q)$(SONIC_SLAVE_USER_BUILD)
 
+# ┌────────────────────────────────────────────────────────────────┐
+# │ Rock (OCI) container build flow                                │
+# │                                                                │
+# │ Rockcraft cannot run inside the sonic-slave Docker container   │
+# │ (it needs LXD/snapd on the host), so we split the build into   │
+# │ three steps:                                                   │
+# │                                                                │
+# │  ┌──────────────────────────────────────────────────────────┐  │
+# │  │ Step 0: Cleanup stale placeholders                       │  │
+# │  │   - Delete rock .gz files smaller than 640KB             │  │
+# │  │   - These are placeholders from a previous Step 1        │  │
+# │  │   - Real rock .gz files (multi-MB) are kept              │  │
+# │  └───────────────────────────┬──────────────────────────────┘  │
+# │                              v                                 │
+# │  ┌──────────────────────────────────────────────────────────┐  │
+# │  │ Step 1: Container pass (ROCK_PREP_ONLY=y)                │  │
+# │  │   - Build all non-rock docker images normally            │  │
+# │  │   - Rock dockers: placeholder .gz + append .rock-needed  │  │
+# │  │   - Skip installer build                                 │  │
+# │  └───────────────────────────┬──────────────────────────────┘  │
+# │                              v                                 │
+# │  ┌──────────────────────────────────────────────────────────┐  │
+# │  │ Step 2: Host rockcraft build (conditional)               │  │
+# │  │   - Only runs if .rock-needed is non-empty               │  │
+# │  │   - Runs on physical host (not in container)             │  │
+# │  │   - Parallelized via make -j using Makefile.rocks        │  │
+# │  │   - Overwrites placeholder .gz with real rock images     │  │
+# │  └───────────────────────────┬──────────────────────────────┘  │
+# │                              v                                 │
+# │  ┌──────────────────────────────────────────────────────────┐  │
+# │  │ Step 3: Container pass (full build)                      │  │
+# │  │   - Always runs (installer needs to be built)            │  │
+# │  │   - Docker .gz targets are up-to-date, skipped quickly   │  │
+# │  │   - Builds installer using real rock .gz files           │  │
+# │  │   - Collects build version info                          │  │
+# │  └──────────────────────────────────────────────────────────┘  │
+# └────────────────────────────────────────────────────────────────┘
+ifeq ($(USE_ROCK_CONTAINER),y)
+	# --- Step 0: Cleanup stale placeholders ---
+	# Delete placeholder .gz files (< 640KB) so Step 1 regenerates them.
+	# Successfully built rock .gz files (multi-MB) are kept to avoid re-building.
+	$(Q)rm -f target/.rock-needed
+	$(Q)for d in $$(find dockers platform -name rockcraft.yaml -printf '%h\n' 2>/dev/null); do \
+		name=$$(basename $$d); \
+		for f in target/$$name.gz target/$$name-$(DBG_IMAGE_MARK).gz; do \
+			if [ -f "$$f" ] && [ $$(stat -c%s "$$f") -lt 655360 ]; then \
+				rm -f "$$f"; \
+			fi; \
+		done; \
+	done
+
+	# --- Step 1: Build docker images inside container (prep pass) ---
+	# ROCK_PREP_ONLY=y: build all dockers, skip installer.
+	# Rock targets get a placeholder .gz and are listed in .rock-needed.
 	$(Q)$(DOCKER_RUN) \
 		$(SLAVE_IMAGE):$(SLAVE_TAG) \
-		bash -c "$(SONIC_BUILD_INSTRUCTION) $@; $(COLLECT_BUILD_VERSION); $(SLAVE_SHELL)" 
+		bash -c "$(SONIC_BUILD_INSTRUCTION) ROCK_PREP_ONLY=y $@; $(SLAVE_SHELL)"
+
+	# --- Step 2: Build rocks on host via rockcraft (conditional) ---
+	# Only runs when Step 1 produced a non-empty .rock-needed list.
+	$(Q)if [ -s target/.rock-needed ]; then \
+		$(MAKE) -f Makefile.rocks -j$(SONIC_BUILD_JOBS) $$(cat target/.rock-needed); \
+	fi
+
+	# --- Step 3: Build installer inside container (full pass) ---
+	# Runs unconditionally: docker targets are cached, only installer is built.
+	$(Q)$(DOCKER_RUN) \
+		$(SLAVE_IMAGE):$(SLAVE_TAG) \
+		bash -c "$(SONIC_BUILD_INSTRUCTION) $@; $(COLLECT_BUILD_VERSION); $(SLAVE_SHELL)"
+else
+	$(Q)$(DOCKER_RUN) \
+		$(SLAVE_IMAGE):$(SLAVE_TAG) \
+		bash -c "$(SONIC_BUILD_INSTRUCTION) $@; $(COLLECT_BUILD_VERSION); $(SLAVE_SHELL)"
+endif
 	$(Q)$(docker-image-cleanup)
 
 docker-cleanup:
