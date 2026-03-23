@@ -324,6 +324,13 @@ PIP_HTTP_TIMEOUT ?= 60
 # BUILD_REDUCE_IMAGE_SIZE - reduce the image size as much as possbible
 BUILD_REDUCE_IMAGE_SIZE = n
 
+# USE_ROCK_CONTAINER - use OCI rock images (built with rockcraft) instead of
+# traditional Docker images (built with docker build). When enabled, container images are
+# built using rockcraft and use pebble as the process manager. When disabled (default),
+# containers are built with docker build and use supervisord as the process manager.
+# Requires rockcraft snap to be installed in the build environment.
+USE_ROCK_CONTAINER ?= n
+
 # SONIC_PTF_ENV_PY_VER - SONiC PTF test Python version. Set to 'mixed' to build the 
 # image with both Python 2 and 3. Set to 'py3' to build a Python 3 only image
 SONIC_PTF_ENV_PY_VER = mixed

@@ -213,7 +213,7 @@ function postStartAction()
     # also chassisdb doesn't support warm/fast reboot, its dump.rdb is deleted
     # at service startup time, nothing need to be done here.
     if [[ "$DATABASE_TYPE" != "chassisdb" ]]; then
-        # Wait until supervisord and redis starts. This change is needed
+        # Wait until the process manager and redis starts. This change is needed
         # because now database_config.json is jinja2 templated based
         # and by the time file gets generated if we do redis ping
         # then we catch python exception of file not valid
@@ -223,7 +223,7 @@ function postStartAction()
         # database will try to access to all other instance database-config.json. If other instance
         # database-config.json files are not ready yet, it will generate the sonic-db-cli core files.
 	waitForAllInstanceDatabaseConfigJsonFilesReady
-        until [[ ($(docker exec -i database$DEV pgrep -x -c pebble) -gt 0) && ($($SONIC_DB_CLI PING | grep -c PONG) -gt 0) &&
+        until [[ ($(docker exec -i database$DEV pgrep -x -c {{ process_manager }}) -gt 0) && ($($SONIC_DB_CLI PING | grep -c PONG) -gt 0) &&
                  ($(docker exec -i database$DEV sonic-db-cli PING | grep -c PONG) -gt 0) ]]; do
           sleep 1;
         done
@@ -272,7 +272,7 @@ function postStartAction()
         # Add redis UDS to the redis group and give read/write access to the group
         REDIS_SOCK="/var/run/redis${DEV}/redis.sock"
     else
-        until [[ ($(docker exec -i ${DOCKERNAME} pgrep -x -c pebble) -gt 0) &&
+        until [[ ($(docker exec -i ${DOCKERNAME} pgrep -x -c {{ process_manager }}) -gt 0) &&
                  ($(docker exec -i ${DOCKERNAME} $SONIC_DB_CLI CHASSIS_APP_DB PING | grep -c True) -gt 0) ]]; do
            sleep 1
         done

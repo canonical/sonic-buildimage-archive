@@ -479,6 +479,7 @@ $(info "PDDF_SUPPORT"                    : "$(PDDF_SUPPORT)")
 $(info "MULTIARCH_QEMU_ENVIRON"          : "$(MULTIARCH_QEMU_ENVIRON)")
 $(info "SONIC_VERSION_CONTROL_COMPONENTS": "$(SONIC_VERSION_CONTROL_COMPONENTS)")
 $(info "ENABLE_ASAN"                     : "$(ENABLE_ASAN)")
+$(info "USE_ROCK_CONTAINER"              : "$(USE_ROCK_CONTAINER)")
 $(info "DEFAULT_CONTAINER_REGISTRY"      : "$(SONIC_DEFAULT_CONTAINER_REGISTRY)")
 ifeq ($(CONFIGURED_PLATFORM),vs)
 $(info "BUILD_MULTIASIC_KVM"             : "$(BUILD_MULTIASIC_KVM)")
@@ -1183,43 +1184,55 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 			$(call expand,$($*.gz_PYTHON_WHEELS)),\
 			$(shell [[ ! -z "$($(component)_VERSION)" && ! -z "$($(component)_NAME)" ]] && \
 				echo "--label com.azure.sonic.versions.$($(component)_NAME)=$($(component)_VERSION)")))
-		j2 $($*.gz_PATH)/Dockerfile.j2 > $($*.gz_PATH)/Dockerfile
-		$(call generate_manifest,$*)
-		# Prepare docker build info
-		PACKAGE_URL_PREFIX=$(PACKAGE_URL_PREFIX) \
-		SONIC_ENFORCE_VERSIONS=$(SONIC_ENFORCE_VERSIONS) \
-		TRUSTED_GPG_URLS=$(TRUSTED_GPG_URLS) \
-		SONIC_VERSION_CACHE=$(SONIC_VERSION_CACHE) \
-		DBGOPT='$(DBGOPT)' \
-		scripts/prepare_docker_buildinfo.sh $* $($*.gz_PATH)/Dockerfile $(CONFIGURED_ARCH) $(LOG)
-		docker info $(LOG)
-		docker build --no-cache $$( [[ "$($*.gz_SQUASH)" != n ]] && echo --squash)\
-			--build-arg http_proxy=$(HTTP_PROXY) \
-			--build-arg https_proxy=$(HTTPS_PROXY) \
-			--build-arg no_proxy=$(NO_PROXY) \
-			--build-arg user=$(USER) \
-			--build-arg uid=$(UID) \
-			--build-arg guid=$(GUID) \
-			--build-arg docker_container_name=$($*.gz_CONTAINER_NAME) \
-			--build-arg frr_user_uid=$(FRR_USER_UID) \
-			--build-arg frr_user_gid=$(FRR_USER_GID) \
-			--build-arg SONIC_VERSION_CACHE=$(SONIC_VERSION_CACHE) \
-			--build-arg SONIC_VERSION_CACHE_SOURCE=$(SONIC_VERSION_CACHE_SOURCE) \
-			--build-arg image_version=$(SONIC_IMAGE_VERSION) \
-			--label com.azure.sonic.manifest="$$(cat $($*.gz_PATH)/manifest.json)" \
-			--label Tag=$(SONIC_IMAGE_VERSION) \
-		        $($(subst -,_,$(notdir $($*.gz_PATH)))_labels) \
-			-t $(DOCKER_IMAGE_REF) $($*.gz_PATH) $(LOG)
-		#pushd $($*.gz_PATH)
-                #rockcraft pack -v 
-		#sudo skopeo --insecure-policy copy oci-archive:$($*.gz_PATH).rock docker-daemon:$($*.gz_PATH):latest
-		#popd
-
-		if [ x$(SONIC_CONFIG_USE_NATIVE_DOCKERD_FOR_BUILD) == x"y" ]; then docker tag $(DOCKER_IMAGE_REF) $*; fi
-		SONIC_VERSION_CACHE=$(SONIC_VERSION_CACHE) ARCH=${CONFIGURED_ARCH}\
+		if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+			# Rock build mode: copy extra files needed by rockcraft
+			cp -f files/rsyslog/00-load-omprog.conf $($*.gz_PATH)/files/
+			cp -f files/rsyslog/rsyslog.conf $($*.gz_PATH)/files/
+			cp -f files/supervisor/supervisord.conf $($*.gz_PATH)/files/
+			cp -f files/build_templates/syslog-layer.yaml $($*.gz_PATH)/files/
+			pushd $($*.gz_PATH)
+			rockname=$$(basename $($*.gz_PATH))
+			rockfullname="$${rockname}_1.0.0_$(CONFIGURED_ARCH).rock"
+			rockcraft clean $(LOG)
+			rockcraft pack $(LOG)
+			sudo rockcraft.skopeo --insecure-policy copy oci-archive:$${rockfullname} docker-daemon:$(DOCKER_IMAGE_REF) $(LOG)
+			popd
+		else
+			# Traditional Docker build mode
+			j2 $($*.gz_PATH)/Dockerfile.j2 > $($*.gz_PATH)/Dockerfile
+			$(call generate_manifest,$*)
+			# Prepare docker build info
+			PACKAGE_URL_PREFIX=$(PACKAGE_URL_PREFIX) \
+			SONIC_ENFORCE_VERSIONS=$(SONIC_ENFORCE_VERSIONS) \
+			TRUSTED_GPG_URLS=$(TRUSTED_GPG_URLS) \
+			SONIC_VERSION_CACHE=$(SONIC_VERSION_CACHE) \
 			DBGOPT='$(DBGOPT)' \
-			scripts/collect_docker_version_files.sh $* $(TARGET_PATH) $(DOCKER_IMAGE_REF) $($*.gz_PATH) $($*.gz_PATH)/Dockerfile $(LOG)
-		if [ ! -z $(filter $*.gz,$(SONIC_PACKAGES_LOCAL)) ]; then docker tag $(DOCKER_IMAGE_REF) $*:$(SONIC_IMAGE_VERSION); fi
+			scripts/prepare_docker_buildinfo.sh $* $($*.gz_PATH)/Dockerfile $(CONFIGURED_ARCH) $(LOG)
+			docker info $(LOG)
+			docker build --no-cache $$( [[ "$($*.gz_SQUASH)" != n ]] && echo --squash)\
+				--build-arg http_proxy=$(HTTP_PROXY) \
+				--build-arg https_proxy=$(HTTPS_PROXY) \
+				--build-arg no_proxy=$(NO_PROXY) \
+				--build-arg user=$(USER) \
+				--build-arg uid=$(UID) \
+				--build-arg guid=$(GUID) \
+				--build-arg docker_container_name=$($*.gz_CONTAINER_NAME) \
+				--build-arg frr_user_uid=$(FRR_USER_UID) \
+				--build-arg frr_user_gid=$(FRR_USER_GID) \
+				--build-arg SONIC_VERSION_CACHE=$(SONIC_VERSION_CACHE) \
+				--build-arg SONIC_VERSION_CACHE_SOURCE=$(SONIC_VERSION_CACHE_SOURCE) \
+				--build-arg image_version=$(SONIC_IMAGE_VERSION) \
+				--label com.azure.sonic.manifest="$$(cat $($*.gz_PATH)/manifest.json)" \
+				--label Tag=$(SONIC_IMAGE_VERSION) \
+					$($(subst -,_,$(notdir $($*.gz_PATH)))_labels) \
+				-t $(DOCKER_IMAGE_REF) $($*.gz_PATH) $(LOG)
+
+			if [ x$(SONIC_CONFIG_USE_NATIVE_DOCKERD_FOR_BUILD) == x"y" ]; then docker tag $(DOCKER_IMAGE_REF) $*; fi
+			SONIC_VERSION_CACHE=$(SONIC_VERSION_CACHE) ARCH=${CONFIGURED_ARCH}\
+				DBGOPT='$(DBGOPT)' \
+				scripts/collect_docker_version_files.sh $* $(TARGET_PATH) $(DOCKER_IMAGE_REF) $($*.gz_PATH) $($*.gz_PATH)/Dockerfile $(LOG)
+			if [ ! -z $(filter $*.gz,$(SONIC_PACKAGES_LOCAL)) ]; then docker tag $(DOCKER_IMAGE_REF) $*:$(SONIC_IMAGE_VERSION); fi
+		fi
 
 		$(call docker-image-save,$*,$@)
 
@@ -1461,6 +1474,7 @@ $(addprefix $(TARGET_PATH)/, $(SONIC_INSTALLERS)) : $(TARGET_PATH)/% : \
 	export include_system_gnmi="$(INCLUDE_SYSTEM_GNMI)"
 	export include_system_eventd="$(INCLUDE_SYSTEM_EVENTD)"
 	export build_reduce_image_size="$(BUILD_REDUCE_IMAGE_SIZE)"
+	export process_manager=$(if $(filter y,$(USE_ROCK_CONTAINER)),pebble,supervisord)
 	export include_restapi="$(INCLUDE_RESTAPI)"
 	export include_nat="$(INCLUDE_NAT)"
 	export include_p4rt="$(INCLUDE_P4RT)"
