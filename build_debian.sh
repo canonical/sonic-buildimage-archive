@@ -32,7 +32,8 @@ cleanup_fsroot_mounts() {
     root=$(readlink -f "$FILESYSTEM_ROOT" 2>/dev/null) || root="$FILESYSTEM_ROOT"
     [ -n "$root" ] || return 0
     local mounts
-    mounts=$(awk -v root="$root" '$2 == root || $2 ~ "^"root"/" {print $2}' /proc/mounts | sort -r)
+    # Only unmount children, not the root itself (it may be a tmpfs we still need).
+    mounts=$(awk -v root="$root" '$2 ~ "^"root"/" {print $2}' /proc/mounts | sort -r)
     for mnt in $mounts; do
         sudo umount "$mnt" 2>/dev/null || sudo umount -l "$mnt" 2>/dev/null || true
     done
@@ -654,9 +655,14 @@ if [[ $RFS_SPLIT_LAST_STAGE == y ]]; then
 
     ## Clean up any stale mounts from a previous failed build
     cleanup_fsroot_mounts
+    sudo umount $FILESYSTEM_ROOT 2>/dev/null || true
 
     sudo fuser -vm $FILESYSTEM_ROOT || true
     sudo rm -rf $FILESYSTEM_ROOT
+    # Mount tmpfs for the chroot filesystem so that dockerd overlay2 never
+    # operates directly on the host filesystem (e.g. btrfs).
+    sudo mkdir -p $FILESYSTEM_ROOT
+    sudo mount -t tmpfs -o size=16G tmpfs $FILESYSTEM_ROOT
     sudo unsquashfs -d $FILESYSTEM_ROOT $TARGET_PATH/$RFS_SQUASHFS_NAME
 
     ## make / as a mountpoint in chroot env, needed by dockerd
@@ -908,3 +914,6 @@ pushd $FILESYSTEM_ROOT && sudo tar -I pigz -cf $OLDPWD/$FILESYSTEM_DOCKERFS -C $
 ## Compress together with /boot, /var/lib/docker and $PLATFORM_DIR as an installer payload zip file
 pushd $FILESYSTEM_ROOT && sudo tar -I pigz -cf platform.tar.gz -C $PLATFORM_DIR . && sudo zip -n .gz $OLDPWD/$INSTALLER_PAYLOAD -r boot/ platform.tar.gz; popd
 sudo zip -g -n .squashfs:.gz $INSTALLER_PAYLOAD $FILESYSTEM_SQUASHFS $FILESYSTEM_DOCKERFS
+
+## Clean up the tmpfs used for the chroot filesystem
+sudo umount $FILESYSTEM_ROOT 2>/dev/null || true
