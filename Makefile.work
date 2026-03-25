@@ -627,19 +627,19 @@ endif
 # │                                                                │
 # │ Rockcraft cannot run inside the sonic-slave Docker container   │
 # │ (it needs LXD/snapd on the host), so we split the build into   │
-# │ three steps:                                                   │
+# │ multiple steps:                                                │
 # │                                                                │
 # │  ┌──────────────────────────────────────────────────────────┐  │
 # │  │ Step 0: Cleanup stale placeholders                       │  │
-# │  │   - Delete rock .gz files smaller than 640KB             │  │
-# │  │   - These are placeholders from a previous Step 1        │  │
-# │  │   - Real rock .gz files (multi-MB) are kept              │  │
+# │  │   - Delete ALL docker .gz files smaller than 640KB       │  │
+# │  │   - These are placeholders; real images are multi-MB     │  │
 # │  └───────────────────────────┬──────────────────────────────┘  │
 # │                              v                                 │
 # │  ┌──────────────────────────────────────────────────────────┐  │
 # │  │ Step 1: Container pass (ROCK_PREP_ONLY=y)                │  │
-# │  │   - Build all non-rock docker images normally            │  │
-# │  │   - Rock dockers: placeholder .gz + append .rock-needed  │  │
+# │  │   - Build debs, wheels, and other non-docker targets     │  │
+# │  │   - ALL docker targets get placeholder .gz (no builds)   │  │
+# │  │   - Rock targets additionally listed in .rock-needed     │  │
 # │  │   - Skip installer build                                 │  │
 # │  └───────────────────────────┬──────────────────────────────┘  │
 # │                              v                                 │
@@ -648,34 +648,38 @@ endif
 # │  │   - Only runs if .rock-needed is non-empty               │  │
 # │  │   - Runs on physical host (not in container)             │  │
 # │  │   - Parallelized via make -j using Makefile.rocks        │  │
-# │  │   - Overwrites placeholder .gz with real rock images     │  │
+# │  │   - Overwrites rock placeholder .gz with real images     │  │
+# │  └───────────────────────────┬──────────────────────────────┘  │
+# │                              v                                 │
+# │  ┌──────────────────────────────────────────────────────────┐  │
+# │  │ Step 2.5: Remove non-rock placeholders                   │  │
+# │  │   - Delete remaining docker .gz < 640KB                  │  │
+# │  │   - Rock .gz (now multi-MB) are preserved                │  │
 # │  └───────────────────────────┬──────────────────────────────┘  │
 # │                              v                                 │
 # │  ┌──────────────────────────────────────────────────────────┐  │
 # │  │ Step 3: Container pass (full build)                      │  │
-# │  │   - Always runs (installer needs to be built)            │  │
-# │  │   - Docker .gz targets are up-to-date, skipped quickly   │  │
-# │  │   - Builds installer using real rock .gz files           │  │
+# │  │   - Rock .gz up-to-date → skipped                        │  │
+# │  │   - Non-rock docker .gz missing → built as real images   │  │
+# │  │   - Builds installer using all real .gz files            │  │
 # │  │   - Collects build version info                          │  │
 # │  └──────────────────────────────────────────────────────────┘  │
 # └────────────────────────────────────────────────────────────────┘
 ifeq ($(USE_ROCK_CONTAINER),y)
 	# --- Step 0: Cleanup stale placeholders ---
-	# Delete placeholder .gz files (< 640KB) so Step 1 regenerates them.
-	# Successfully built rock .gz files (multi-MB) are kept to avoid re-building.
+	# Delete ALL placeholder .gz files (< 640KB): both rock and docker.
+	# Real images (multi-MB) are kept to avoid re-building.
 	$(Q)rm -f target/.rock-needed
-	$(Q)for d in $$(find dockers platform -name rockcraft.yaml -printf '%h\n' 2>/dev/null); do \
-		name=$$(basename $$d); \
-		for f in target/$$name.gz target/$$name-$(DBG_IMAGE_MARK).gz; do \
-			if [ -f "$$f" ] && [ $$(stat -c%s "$$f") -lt 655360 ]; then \
-				rm -f "$$f"; \
-			fi; \
-		done; \
+	$(Q)for f in target/docker-*.gz; do \
+		if [ -f "$$f" ] && [ $$(stat -c%s "$$f") -lt 655360 ]; then \
+			rm -f "$$f"; \
+		fi; \
 	done
 
-	# --- Step 1: Build docker images inside container (prep pass) ---
-	# ROCK_PREP_ONLY=y: build all dockers, skip installer.
-	# Rock targets get a placeholder .gz and are listed in .rock-needed.
+	# --- Step 1: Container pass (prep — placeholders only, no docker builds) ---
+	# ROCK_PREP_ONLY=y: all dockers get placeholder .gz, skip real builds.
+	# Rock targets are additionally listed in .rock-needed.
+	# Debs, wheels, and other non-docker targets are built normally.
 	$(Q)$(DOCKER_RUN) \
 		$(SLAVE_IMAGE):$(SLAVE_TAG) \
 		bash -c "$(SONIC_BUILD_INSTRUCTION) ROCK_PREP_ONLY=y $@; $(SLAVE_SHELL)"
@@ -686,8 +690,19 @@ ifeq ($(USE_ROCK_CONTAINER),y)
 		$(MAKE) -f Makefile.rocks -j$(SONIC_BUILD_JOBS) $$(cat target/.rock-needed); \
 	fi
 
-	# --- Step 3: Build installer inside container (full pass) ---
-	# Runs unconditionally: docker targets are cached, only installer is built.
+	# --- Step 2.5: Remove non-rock placeholders ---
+	# Rock .gz files are now real (multi-MB). Non-rock docker .gz files are
+	# still placeholders — delete them so Step 3 builds real docker images.
+	$(Q)for f in target/docker-*.gz; do \
+		if [ -f "$$f" ] && [ $$(stat -c%s "$$f") -lt 655360 ]; then \
+			rm -f "$$f"; \
+		fi; \
+	done
+
+	# --- Step 3: Container pass (full build) ---
+	# Rock .gz targets exist and are up-to-date → skipped.
+	# Non-rock docker .gz files were removed → rebuilt as real docker images.
+	# Installer is built using all real .gz files.
 	$(Q)$(DOCKER_RUN) \
 		$(SLAVE_IMAGE):$(SLAVE_TAG) \
 		bash -c "$(SONIC_BUILD_INSTRUCTION) $@; $(COLLECT_BUILD_VERSION); $(SLAVE_SHELL)"
