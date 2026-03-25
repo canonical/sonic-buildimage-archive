@@ -17,8 +17,13 @@ MIRROR_VERSION_FILE=
 # The default mirror urls
 # DEFAULT_MIRROR_URLS=http://debian-archive.trafficmanager.net/debian/
 # DEFAULT_MIRROR_SECURITY_URLS=http://debian-archive.trafficmanager.net/debian-security/
-DEFAULT_MIRROR_URLS=http://archive.ubuntu.com/ubuntu/
-DEFAULT_MIRROR_SECURITY_URLS=http://archive.ubuntu.com/ubuntu/
+if [ "$DISTRIBUTION" == "noble" ]; then
+    DEFAULT_MIRROR_URLS=http://archive.ubuntu.com/ubuntu/
+    DEFAULT_MIRROR_SECURITY_URLS=http://archive.ubuntu.com/ubuntu/
+else
+    DEFAULT_MIRROR_URLS=http://deb.debian.org/debian/
+    DEFAULT_MIRROR_SECURITY_URLS=http://deb.debian.org/debian-security/
+fi
 
 # The debian-archive.trafficmanager.net does not support armhf, use debian.org instead
 if [ "$ARCHITECTURE" == "armhf" ]; then
