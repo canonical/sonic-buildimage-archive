@@ -1232,11 +1232,24 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 			$(call expand,$($*.gz_PYTHON_WHEELS)),\
 			$(shell [[ ! -z "$($(component)_VERSION)" && ! -z "$($(component)_NAME)" ]] && \
 				echo "--label com.azure.sonic.versions.$($(component)_NAME)=$($(component)_VERSION)")))
-		if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
-			# Rock mode: generate manifest.json, then placeholder .gz for make dependency tracking
-			$(call generate_manifest,$*)
-			cp $(ROCK_PLACEHOLDER_GZ) $@
-			echo $@ >> $(TARGET_PATH)/.rock-needed
+		if [ "$(ROCK_PREP_ONLY)" = "y" ]; then
+			# Prep pass: placeholder .gz for all dockers, skip real builds
+			if [ ! -f $@ ] || [ $$(stat -c%s $@) -lt 655360 ]; then
+				cp $(ROCK_PLACEHOLDER_GZ) $@
+				if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+					$(call generate_manifest,$*)
+					echo $@ >> $(TARGET_PATH)/.rock-needed
+				fi
+			fi
+		else if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+			# Rock mode (Step 3): skip if real rock .gz already exists (> 640KB)
+			if [ -f $@ ] && [ $$(stat -c%s $@) -ge 655360 ]; then
+				echo "Rock target $@ already built, skipping"
+			else
+				$(call generate_manifest,$*)
+				cp $(ROCK_PLACEHOLDER_GZ) $@
+				echo $@ >> $(TARGET_PATH)/.rock-needed
+			fi
 		else
 			# Traditional Docker build mode
 			j2 $($*.gz_PATH)/Dockerfile.j2 > $($*.gz_PATH)/Dockerfile
@@ -1282,6 +1295,7 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 		# Save the target deb into DPKG cache
 		$(call SAVE_CACHE,$*.gz,$@)
 	fi
+	fi
 
 	$(FOOTER)
 
@@ -1296,9 +1310,18 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_DBG_IMAGES)) : $(TARGET_PATH)/%-$(DBG_IMAG
 		$(call dpkg_depend,$(TARGET_PATH)/%-$(DBG_IMAGE_MARK).gz.dep)
 	$(HEADER)
 
-	if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
-		# Rock mode: placeholder .gz for make dependency tracking
-		cp $(ROCK_PLACEHOLDER_GZ) $@
+	if [ "$(ROCK_PREP_ONLY)" = "y" ]; then
+		# Prep pass: placeholder .gz for all debug dockers
+		if [ ! -f $@ ] || [ $$(stat -c%s $@) -lt 655360 ]; then
+			cp $(ROCK_PLACEHOLDER_GZ) $@
+		fi
+	else if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+		# Rock mode: skip if real rock .gz already exists (> 640KB)
+		if [ -f $@ ] && [ $$(stat -c%s $@) -ge 655360 ]; then
+			echo "Rock DBG target $@ already built, skipping"
+		else
+			cp $(ROCK_PLACEHOLDER_GZ) $@
+		fi
 	else
 
 	# Load the target deb from DPKG cache
@@ -1377,10 +1400,13 @@ endif
 
 $(DOCKER_LOAD_TARGETS) : $(TARGET_PATH)/%.gz-load : .platform docker-start $$(TARGET_PATH)/$$*.gz
 	$(HEADER)
-	if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
+	if [ "$(ROCK_PREP_ONLY)" = "y" ]; then
+		echo "Prep pass: skipping docker load for $*"
+	else if [ "$(USE_ROCK_CONTAINER)" = "y" ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then
 		echo "Rock mode: skipping docker load for $*"
 	else
 	$(call docker-image-load,$*)
+	fi
 	fi
 	$(FOOTER)
 
