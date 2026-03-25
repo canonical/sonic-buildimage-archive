@@ -66,7 +66,7 @@ clean_sys() {
 trap_push clean_sys
 sudo LANG=C chroot $FILESYSTEM_ROOT mount sysfs /sys -t sysfs
 
-sudo bash -c "echo \"DOCKER_OPTS=\"--storage-driver=overlay2\"\" >> $FILESYSTEM_ROOT/etc/default/docker"
+sudo bash -c "echo 'DOCKER_OPTS=\"--storage-driver=overlay2 --iptables=false --bridge=none\"' >> $FILESYSTEM_ROOT/etc/default/docker"
 # Copy docker start script to be able to start docker in chroot
 sudo mkdir -p "$FILESYSTEM_ROOT/$DOCKER_CTL_DIR"
 sudo cp $DOCKER_SCRIPTS_DIR/docker "$FILESYSTEM_ROOT/$DOCKER_CTL_SCRIPT"
@@ -952,6 +952,10 @@ if [[ $MULTIARCH_QEMU_ENVIRON == y || $CROSS_BUILD_ENVIRON == y ]]; then
 else
     sudo chroot $FILESYSTEM_ROOT $DOCKER_CTL_SCRIPT stop
 fi
+
+# Reset /etc/default/docker to production config (remove build-only flags
+# like --bridge=none that were needed for the chroot dockerd).
+sudo bash -c "echo 'DOCKER_OPTS=\"--storage-driver=overlay2\"' > $FILESYSTEM_ROOT/etc/default/docker"
 
 sudo bash -c "echo { > $FILESYSTEM_ROOT_USR_SHARE_SONIC_TEMPLATES/ctr_image_names.json"
 {% for entry in feature_vs_image_names.split(' ') -%}
