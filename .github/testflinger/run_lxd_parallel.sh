@@ -410,8 +410,10 @@ while [ "$DONE" -lt "${#PIDS[@]}" ]; do
             continue
         fi
         if ! kill -0 "$PID" 2>/dev/null; then
-            wait "$PID" 2>/dev/null
-            EXIT_CODES[$i]=$?
+            # Capture exit code without triggering set -e (wait returns
+            # the process's exit code, which is non-zero for failed tests)
+            EXIT_CODES[$i]=0
+            wait "$PID" 2>/dev/null || EXIT_CODES[$i]=$?
             DONE=$((DONE + 1))
             GID=$((i + 1))
             if [ "${EXIT_CODES[$i]}" -eq 0 ]; then
