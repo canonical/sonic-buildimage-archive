@@ -80,45 +80,17 @@ echo "  Per VM:        ${VM_RAM_MB} MB"
 echo "  Workers:       ${NUM_WORKERS}"
 
 # ============================================================
-# Step 2: Read test list and split into groups
+# Step 2: Validate test list
 # ============================================================
 echo ""
-echo "=== Step 2: Splitting tests into $NUM_WORKERS groups ==="
+echo "=== Step 2: Validating test list ==="
 if [ ! -f "$TEST_LIST_FILE" ]; then
     echo "ERROR: Test list file not found: $TEST_LIST_FILE" >&2
     exit 1
 fi
-mapfile -t ALL_TESTS < "$TEST_LIST_FILE"
-TOTAL=${#ALL_TESTS[@]}
-PER_GROUP=$(( (TOTAL + NUM_WORKERS - 1) / NUM_WORKERS ))
-echo "  Total tests:   $TOTAL"
-echo "  Per group:     ~$PER_GROUP"
-
-# Generate per-worker run scripts (deploy + test command baked in)
-for (( i=0; i<NUM_WORKERS; i++ )); do
-    GROUP_ID=$((i + 1))
-    START=$(( i * PER_GROUP ))
-    BATCH=("${ALL_TESTS[@]:$START:$PER_GROUP}")
-
-    SCRIPT_FILE="$LOG_DIR/run_worker_${GROUP_ID}.sh"
-    {
-        echo '#!/bin/bash'
-        echo 'set -ex'
-        echo ''
-        echo '# Phase 1: Deploy topology'
-        echo '/home/tor-ci/deploy-testbed.sh'
-        echo ''
-        echo '# Phase 2: Run tests'
-        # Build the full command with all -c flags
-        printf 'docker exec -w /data/sonic-mgmt/tests mgmt ./run_tests.sh -n vms-kvm-t0 -d vlab-01 -f vtestbed.yaml -i ../ansible/veos_vtb'
-        for t in "${BATCH[@]}"; do
-            [ -n "$t" ] && printf ' -c %s' "$t"
-        done
-        echo ''
-    } > "$SCRIPT_FILE"
-    chmod +x "$SCRIPT_FILE"
-    echo "  Worker $GROUP_ID: ${#BATCH[@]} tests → $SCRIPT_FILE"
-done
+TOTAL=$(wc -l < "$TEST_LIST_FILE")
+echo "  Test list: $TEST_LIST_FILE ($TOTAL files)"
+echo "  Worker scripts will be generated in Step 4 (after sonic-mgmt is cloned)"
 
 # ============================================================
 # Step 3: Install and initialize LXD
@@ -301,6 +273,27 @@ $LXC exec "$TEMPLATE_VM" -- bash -c \
      chown tor-ci:tor-ci /home/tor-ci/deploy-testbed.sh && \
      chmod +x /home/tor-ci/deploy-testbed.sh"
 echo "  Template VM prepared (packages installed, images ready, docker loaded)"
+
+# --- 4c2: Generate per-worker scripts using split_tests.py ---
+# Now that sonic-mgmt is cloned in the template VM, we can parse the actual
+# test source files with ast to count test functions (incl. parametrize).
+# split_tests.py groups tests by directory (one pytest call per dir) and
+# load-balances directories across workers by actual test weight.
+echo ""
+echo "  Generating per-worker scripts (ast-based test counting)..."
+$LXC file push "$SCRIPT_DIR/split_tests.py" "${TEMPLATE_VM}/home/ubuntu/split_tests.py"
+$LXC file push "$TEST_LIST_FILE" "${TEMPLATE_VM}/home/ubuntu/upstream_t0_tests.txt"
+$LXC exec "$TEMPLATE_VM" -- python3 /home/ubuntu/split_tests.py \
+    --test-list /home/ubuntu/upstream_t0_tests.txt \
+    --tests-dir /data/sonic-mgmt/tests \
+    --workers "$NUM_WORKERS" \
+    --output-dir /home/tor-ci
+
+# Pull generated scripts back to host LOG_DIR
+for (( i=1; i<=NUM_WORKERS; i++ )); do
+    $LXC file pull "${TEMPLATE_VM}/home/tor-ci/run_worker_${i}.sh" "$LOG_DIR/run_worker_${i}.sh"
+done
+echo "  Worker scripts generated and pulled to $LOG_DIR"
 
 # --- 4d: Clean template state, stop, and clone ---
 echo ""

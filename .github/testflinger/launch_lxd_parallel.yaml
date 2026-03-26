@@ -20,8 +20,9 @@ test_data:
     $SSH "curl -f -o ~/setup-testbed-ci.sh   $YANBOX/setup-testbed-ci.sh"
     $SSH "curl -f -o ~/deploy-testbed.sh     $YANBOX/deploy-testbed.sh"
     $SSH "curl -f -o ~/setup-local-env.sh    $YANBOX/setup-local-env.sh"
+    $SSH "curl -f -o ~/split_tests.py        $YANBOX/split_tests.py"
     $SSH "curl -f -o ~/upstream_t0_tests.txt $YANBOX/upstream_t0_tests.txt"
-    $SSH "chmod +x ~/run_lxd_parallel.sh ~/setup-testbed.sh ~/setup-testbed-ci.sh ~/deploy-testbed.sh ~/setup-local-env.sh"
+    $SSH "chmod +x ~/run_lxd_parallel.sh ~/setup-testbed.sh ~/setup-testbed-ci.sh ~/deploy-testbed.sh ~/setup-local-env.sh ~/split_tests.py"
 
     echo "=== Running LXD parallel tests ==="
     $SSH "bash -x ~/run_lxd_parallel.sh 10.239.7.20"
