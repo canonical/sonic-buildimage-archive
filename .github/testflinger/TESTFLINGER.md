@@ -294,7 +294,9 @@ graph LR
 
 ### Why It Matters
 
-The container must match the sonic-mgmt branch being tested. The Docker Hub `docker-sonic-mgmt:latest` is built from upstream master and carries package versions that may be incompatible with release branches like 202405. Using the wrong container leads to cryptic test failures (Ansible version mismatches, missing Python modules, etc.).
+Although the container's source code lives in **sonic-buildimage** (`dockers/docker-sonic-mgmt/Dockerfile.j2`), the `Dockerfile.j2` in each buildimage branch pins specific Python packages and Ansible versions that must match the corresponding **sonic-mgmt** branch. This means to test with `sonic-mgmt:202405`, you must build `docker-sonic-mgmt` from `sonic-buildimage:202405` — not from `master` or any other branch.
+
+The Docker Hub `docker-sonic-mgmt:latest` is built from upstream master and carries package versions incompatible with release branches like 202405. Using the wrong container leads to cryptic test failures (Ansible version mismatches, missing Python modules, etc.).
 
 ### Build System Details
 
