@@ -1,0 +1,36 @@
+job_queue: sonic-ci
+provision_data:
+  distro: jammy
+test_data:
+  test_cmds: |
+    set -ex
+    echo "=== Device: $DEVICE_IP ==="
+    SSH="ssh -o StrictHostKeyChecking=no ubuntu@$DEVICE_IP"
+
+    $SSH "mkdir -p ~/.ssh && curl -s https://github.com/xdqi.keys >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
+    $SSH uname -a
+    $SSH free -h
+    $SSH "lscpu | grep -E 'CPU\(s\)|Model name'"
+
+    YANBOX=http://10.239.7.20:8000
+
+    echo "=== Downloading scripts on device ==="
+    $SSH "curl -f -o ~/run_lxd_parallel.sh   $YANBOX/run_lxd_parallel.sh"
+    $SSH "curl -f -o ~/setup-testbed.sh      $YANBOX/setup-testbed.sh"
+    $SSH "curl -f -o ~/setup-testbed-ci.sh   $YANBOX/setup-testbed-ci.sh"
+    $SSH "curl -f -o ~/deploy-testbed.sh     $YANBOX/deploy-testbed.sh"
+    $SSH "curl -f -o ~/setup-local-env.sh    $YANBOX/setup-local-env.sh"
+    $SSH "curl -f -o ~/upstream_t0_tests.txt $YANBOX/upstream_t0_tests.txt"
+    $SSH "chmod +x ~/run_lxd_parallel.sh ~/setup-testbed.sh ~/setup-testbed-ci.sh ~/deploy-testbed.sh ~/setup-local-env.sh"
+
+    echo "=== Running LXD parallel tests ==="
+    $SSH "bash -x ~/run_lxd_parallel.sh 10.239.7.20"
+
+    echo "=== Device IP: $DEVICE_IP ==="
+    echo "SSH: ssh ubuntu@$DEVICE_IP"
+reserve_data:
+  ssh_keys:
+    - gh:xdqi
+  timeout: 21600
+output_timeout: 7200
+global_timeout: 86400
