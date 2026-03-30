@@ -32,7 +32,7 @@ YANBOX_IP="${1:?Usage: $0 <yanbox_ip> [sonic_mgmt_branch] [sonic_mgmt_repo]}"
 SONIC_MGMT_BRANCH="${2:-ubuntu-sonic-202405}"
 SONIC_MGMT_REPO="${3:-canonical/sonic-mgmt}"
 
-VM_RAM_MB="${VM_RAM_MB:-32768}"
+VM_RAM_MB="${VM_RAM_MB:-24576}"
 VM_DISK_GB="${VM_DISK_GB:-200}"
 HOST_RESERVED_MB="${HOST_RESERVED_MB:-16384}"
 VM_CPUS="${VM_CPUS:-12}"
