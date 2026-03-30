@@ -323,7 +323,7 @@ echo "  Preparing template for cloning..."
 $LXC exec "$TEMPLATE_VM" -- cloud-init clean --machine-id --logs --seed --configs all
 
 echo "  Stopping $TEMPLATE_VM for cloning..."
-$LXC stop "$TEMPLATE_VM"
+$LXC stop "$TEMPLATE_VM" || $LXC stop "$TEMPLATE_VM" --force || true
 
 WORKERS+=("$TEMPLATE_VM")
 for (( i=2; i<=NUM_WORKERS; i++ )); do
