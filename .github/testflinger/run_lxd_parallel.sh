@@ -19,6 +19,7 @@
 #   HOST_RESERVED_MB — RAM reserved for host in MiB (default: 16384 = 16 GB)
 #   VM_CPUS          — vCPUs per VM (default: 12)
 #   MAX_WORKERS      — Cap on number of workers (default: unlimited)
+#   VS_IMAGE_URL     — Full URL to sonic-vs.img.gz (default: $YANBOX_URL/sonic-vs.img.gz)
 #
 set -euo pipefail
 
@@ -36,6 +37,7 @@ VM_DISK_GB="${VM_DISK_GB:-200}"
 HOST_RESERVED_MB="${HOST_RESERVED_MB:-16384}"
 VM_CPUS="${VM_CPUS:-12}"
 MAX_WORKERS="${MAX_WORKERS:-99}"
+VS_IMAGE_URL="${VS_IMAGE_URL:-}"
 
 YANBOX_URL="http://$YANBOX_IP:8000"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -209,7 +211,7 @@ WORKERS=()
 # --- 4a: Download large CI files to host cache ---
 CI_CACHE="$HOME/ci-cache"
 mkdir -p "$CI_CACHE"
-for f in sonic-vs.img.gz cEOS64-lab-4.32.5M.tar docker-sonic-mgmt.gz; do
+for f in cEOS64-lab-4.32.5M.tar docker-sonic-mgmt.gz; do
     if [ ! -f "$CI_CACHE/$f" ]; then
         echo "  Downloading $f from yanbox..."
         curl -f -o "$CI_CACHE/$f" "$YANBOX_URL/$f"
@@ -217,6 +219,14 @@ for f in sonic-vs.img.gz cEOS64-lab-4.32.5M.tar docker-sonic-mgmt.gz; do
         echo "  $f already cached"
     fi
 done
+# Download VS image (supports override via VS_IMAGE_URL env var)
+if [ ! -f "$CI_CACHE/sonic-vs.img.gz" ]; then
+    VS_DL_URL="${VS_IMAGE_URL:-$YANBOX_URL/sonic-vs.img.gz}"
+    echo "  Downloading sonic-vs.img.gz from $VS_DL_URL..."
+    curl -f -o "$CI_CACHE/sonic-vs.img.gz" "$VS_DL_URL"
+else
+    echo "  sonic-vs.img.gz already cached"
+fi
 
 # --- 4b: Create and boot template VM ---
 if ! $LXC info "$TEMPLATE_VM" &>/dev/null; then
