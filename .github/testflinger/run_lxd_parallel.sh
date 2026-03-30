@@ -66,14 +66,12 @@ if [ "$NUM_WORKERS" -gt "$MAX_WORKERS" ]; then
     NUM_WORKERS="$MAX_WORKERS"
 fi
 
-# If no NVMe disk is present (SATA-only machine), cap workers to avoid
-# I/O contention during parallel KVM disk image copies + VM boot
+# On SATA-only machines (no NVMe), reduce batch size for staggered deploy
+# to avoid I/O contention during parallel KVM disk image copies + VM boot.
+# (The actual cap is handled by RAM-based calculation above.)
 if ! ls /dev/nvme*n1 &>/dev/null; then
-    MAX_SATA_WORKERS=4
-    echo "  No NVMe detected — capping workers to $MAX_SATA_WORKERS (SATA I/O limit)"
-    if [ "$NUM_WORKERS" -gt "$MAX_SATA_WORKERS" ]; then
-        NUM_WORKERS="$MAX_SATA_WORKERS"
-    fi
+    SATA_BATCH_SIZE=2
+    echo "  No NVMe detected — will use smaller deploy batch size ($SATA_BATCH_SIZE)"
 fi
 
 echo "  Host RAM:      ${TOTAL_RAM_MB} MB"
@@ -378,13 +376,23 @@ echo ""
 echo "  All VMs ready"
 
 # ============================================================
-# Step 5: Run full pipeline in each VM (parallel)
+# Step 5: Run full pipeline in each VM (staggered launch)
 # ============================================================
 echo ""
-echo "=== Step 5: Running setup + deploy + test in $NUM_WORKERS VMs (parallel) ==="
+echo "=== Step 5: Running setup + deploy + test in $NUM_WORKERS VMs (staggered) ==="
 echo ""
 
+# Stagger worker launches to avoid I/O contention during deploy.
+# deploy-testbed copies a ~2GB KVM disk image and boots a VS VM — launching
+# all workers simultaneously can starve disks and cause VM startup timeouts.
+# We launch in batches: first batch immediately, then each subsequent batch
+# waits for the previous batch to finish the heavy I/O phase (indicated by
+# "Deploy complete" appearing in their logs OR a timeout).
+BATCH_SIZE="${SATA_BATCH_SIZE:-5}"
+DEPLOY_WAIT_TIMEOUT=900  # 15 min max wait per batch
+
 PIDS=()
+BATCH=0
 for (( i=0; i<NUM_WORKERS; i++ )); do
     GROUP_ID=$((i + 1))
     VM="${WORKERS[$i]}"
@@ -398,11 +406,42 @@ for (( i=0; i<NUM_WORKERS; i++ )); do
     ) > "$LOG_FILE" 2>&1 &
 
     PIDS+=($!)
+
+    # After each batch (except the last), wait for deploy to finish
+    if (( (i + 1) % BATCH_SIZE == 0 && i + 1 < NUM_WORKERS )); then
+        BATCH=$((BATCH + 1))
+        echo ""
+        echo "  Batch $BATCH launched (workers $((i - BATCH_SIZE + 2))-$GROUP_ID)"
+        echo "  Waiting for deploy phase to complete before launching next batch..."
+        WAITED=0
+        while [ "$WAITED" -lt "$DEPLOY_WAIT_TIMEOUT" ]; do
+            ALL_DEPLOYED=true
+            for (( j=i-BATCH_SIZE+1; j<=i; j++ )); do
+                WID=$((j + 1))
+                WF="$LOG_DIR/worker_${WID}.log"
+                # Check if deploy finished (success or failure)
+                if ! grep -q "Deploy complete\|deploy-testbed.sh: line\|PLAY RECAP\|pytest" "$WF" 2>/dev/null; then
+                    ALL_DEPLOYED=false
+                    break
+                fi
+            done
+            if $ALL_DEPLOYED; then
+                echo "  Batch $BATCH deploy completed after ${WAITED}s — launching next batch"
+                break
+            fi
+            sleep 15
+            WAITED=$((WAITED + 15))
+        done
+        if [ "$WAITED" -ge "$DEPLOY_WAIT_TIMEOUT" ]; then
+            echo "  Batch $BATCH deploy wait timed out after ${DEPLOY_WAIT_TIMEOUT}s — launching next batch anyway"
+        fi
+        echo ""
+    fi
 done
 
 echo ""
 echo "============================================"
-echo "  All $NUM_WORKERS workers launched"
+echo "  All $NUM_WORKERS workers launched (in batches of $BATCH_SIZE)"
 echo "  PIDs: ${PIDS[*]}"
 echo "============================================"
 echo ""
