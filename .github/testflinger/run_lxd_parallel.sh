@@ -282,6 +282,13 @@ $LXC exec "$TEMPLATE_VM" -- bash -c \
     "cp /home/ubuntu/deploy-testbed.sh /home/tor-ci/deploy-testbed.sh && \
      chown tor-ci:tor-ci /home/tor-ci/deploy-testbed.sh && \
      chmod +x /home/tor-ci/deploy-testbed.sh"
+
+# Pre-tag debian:jessie so ansible vm_set doesn't need to pull from ACR
+# (sonicdev-microsoft.azurecr.io:443/debian:jessie was removed upstream)
+$LXC exec "$TEMPLATE_VM" -- bash -c \
+    "docker pull debian:jessie 2>/dev/null && \
+     docker tag debian:jessie sonicdev-microsoft.azurecr.io:443/debian:jessie || true"
+
 echo "  Template VM prepared (packages installed, images ready, docker loaded)"
 
 # --- 4c2: Generate per-worker scripts using split_tests.py ---
