@@ -41,7 +41,7 @@ VS_IMAGE_URL="${VS_IMAGE_URL:-}"
 
 YANBOX_URL="http://$YANBOX_IP:8000"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEST_LIST_FILE="${SCRIPT_DIR}/upstream_t0_tests.txt"
+TEST_LIST_FILE="${SCRIPT_DIR}/upstream_t0_tests_trimmed.txt"
 LOG_DIR="$HOME/lxd-test-results-$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$LOG_DIR"

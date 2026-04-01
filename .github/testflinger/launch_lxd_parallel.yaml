@@ -1,4 +1,4 @@
-job_queue: sonic-ci
+job_queue: kroop
 provision_data:
   distro: jammy
 test_data:

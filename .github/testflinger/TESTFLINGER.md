@@ -1,5 +1,40 @@
 # Testflinger CI Refactoring & Sonic Repository Architecture
 
+## 0. Executive Snapshot (Read This First)
+
+### What this document proves
+
+- The SONiC VS test pipeline for release 202405 was realigned to the correct branch and made reproducible.
+- The CI flow was refactored from monolithic YAML into modular scripts with LXD-based parallel isolation.
+- Round 4 fair comparison shows an official-image pass-rate advantage, with concrete regression hotspots identified and archived.
+
+### Headline outcomes
+
+- Branch alignment: moved to `canonical/sonic-mgmt` on `ubuntu-sonic-202405`.
+- Environment stability: stopped relying on Docker Hub `docker-sonic-mgmt:latest`; switched to prebuilt branch-matched image.
+- Pipeline maintainability: migrated to modular scripts (`run_lxd_parallel.sh`, `setup-testbed*.sh`, `deploy-testbed.sh`).
+- Analysis reliability: parser fix corrected false incomplete/hung classification.
+- Round 4 fair result: `52.1%` (ubuntu-sonic) vs `61.3%` (official) on common completed directories.
+
+## Reading Guide
+
+Use one of these paths instead of reading top-to-bottom:
+
+1. Management 5-minute path: Sections 0 -> 8 -> 9 -> 10
+2. Implementation path: Sections 1 -> 2 -> 4 -> 10
+3. Root-cause and validation path: Section 8 -> Appendix A -> Appendix C
+
+## Quick Index
+
+- Section 8: Round 3/4 outcomes and optimization evidence
+- Section 9: Personal contribution ledger (for performance/archive evidence)
+- Section 10: Reproducibility entrypoint and acceptance criteria
+- Appendix A: `docker-sonic-mgmt` deep dive
+- Appendix B: branch correspondence
+- Appendix C: file inventory and script map
+
+---
+
 ## 1. Background: The Journey
 
 ### Original Goal
@@ -286,7 +321,7 @@ graph LR
 
 ---
 
-## 5. Deep Dive: docker-sonic-mgmt
+## Appendix A. Deep Dive: docker-sonic-mgmt (Reference)
 
 ### What It Is
 
@@ -376,7 +411,7 @@ These are **build-time components** that get packaged into the SONiC image itsel
 
 ---
 
-## 6. Branch Correspondence
+## Appendix B. Branch Correspondence (Reference)
 
 ### Naming Convention
 
@@ -408,7 +443,7 @@ These can be overridden via script parameters or Jinja2 template variables.
 
 ---
 
-## 7. Testflinger File Inventory
+## Appendix C. Testflinger File Inventory (Reference)
 
 ### Active (LXD parallel pipeline)
 
@@ -583,7 +618,7 @@ This section records concrete work delivered in this effort, with evidence artif
 | 202405 test alignment | Switched test framework source from outdated fork to `canonical/sonic-mgmt` on `ubuntu-sonic-202405` | `setup-testbed-ci.sh`, Section 1 / Problem 1 | Eliminated branch drift and aligned test content to release target |
 | docker-sonic-mgmt compatibility fix | Identified Docker Hub image mismatch; established local build path and pinned build flags (`NOBULLSEYE=0 NONOBLE=1 LEGACY_SONIC_MGMT_DOCKER=n`) | `rules/docker-sonic-mgmt.mk`, `dockers/docker-sonic-mgmt/Dockerfile.j2`, Section 1 / Problem 2-3 | Restored runtime compatibility between test container and 202405 test suite |
 | Config externalization | Replaced hardcoded sonic-mgmt repo edits with runtime patching via `setup-local-env.sh` | `setup-local-env.sh`, Section 1 / Problem 4 | Removed environment-specific fork hacks; reduced rebase and branch-switch friction |
-| CI architecture refactor | Migrated monolithic inline YAML flow into modular scripts (`run_lxd_parallel.sh`, `setup-testbed*.sh`, `deploy-testbed.sh`) | Section 2, file inventory in Section 7 | Better maintainability, easier local debugging, safer idempotent re-runs |
+| CI architecture refactor | Migrated monolithic inline YAML flow into modular scripts (`run_lxd_parallel.sh`, `setup-testbed*.sh`, `deploy-testbed.sh`) | Section 2, file inventory in Appendix C | Better maintainability, easier local debugging, safer idempotent re-runs |
 | Parallel test infrastructure | Implemented LXD template+clone pipeline with RAM-based worker auto-scaling, storage auto-detection, and heartbeat progress output | `run_lxd_parallel.sh`, Section 4 | Enabled stable parallel execution with isolated workers and reduced cross-test interference |
 | Result parser reliability fix | Fixed `RESULT_PATTERN` to support single `=` summary lines and optional `(H:MM:SS)` duration | `analyze_results.py`, Section 8 / Parser Bug Discovery & Fix | Common completed directories increased from 39 to 60; corrected false-hang classification |
 | Analysis tooling and fair comparison | Added/used `analyze_slow_dirs.py`, `compare_runs.py`, `compare_fair.py`; generated fair per-directory reports | `best-perdir-comparison.md`, `round4-perdir-comparison.md`, Section 8 | Produced apples-to-apples comparison and identified high-impact gap drivers |
