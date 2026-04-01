@@ -5,6 +5,7 @@ Parses per-directory pytest results from each worker log and produces
 a summary report with pass/fail/skip/error counts and durations.
 """
 
+import json
 import re
 import sys
 import os
@@ -18,8 +19,10 @@ DIR_PATTERN = re.compile(r'^=== Directory: (.+?) \((\d+) tests? from (\d+) files
 #   =================== 1 passed, 1 warning in 103.12s (0:01:43) ===================
 #   ============== 2 failed, 8 skipped, 1 warning in 98.54s (0:01:38) ==============
 #   === no tests ran in 0.47s (0:00:00) ===
+#   = 11 failed, 12 passed, 23 skipped, 15 warnings, 11 errors in 13815.40s (3:50:15) =
+#   ======================= 15 skipped, 1 warning in 15.53s ========================
 RESULT_PATTERN = re.compile(
-    r'^={2,}\s+(.*?)\s+in\s+[\d.]+s\s+\((\d+:\d+:\d+)\)\s*={2,}$'
+    r'^={1,}\s+(.*?)\s+in\s+([\d.]+)s\s*(?:\((\d+:\d+:\d+)\))?\s*={1,}$'
 )
 
 # Patterns to extract counts from the result string
@@ -110,10 +113,12 @@ def parse_worker_log(filepath):
         # Check for pytest result line
         rm = RESULT_PATTERN.match(line)
         if rm and current_dir:
+            raw_secs = float(rm.group(2))
+            dur_str = rm.group(3) if rm.group(3) else format_duration(int(raw_secs))
             last_result_line = {
                 'raw': rm.group(1),
-                'duration_str': rm.group(2),
-                'duration_secs': parse_duration(rm.group(2)),
+                'duration_str': dur_str,
+                'duration_secs': parse_duration(dur_str) if rm.group(3) else int(raw_secs),
                 'counts': {},
             }
             for key, pat in COUNT_PATTERNS.items():
@@ -158,17 +163,33 @@ def status_emoji(c):
     return '✅'
 
 
+def parse_worker_script(filepath):
+    """Parse a run_worker_N.sh script to extract assigned directory names."""
+    dirs = []
+    dir_pattern = re.compile(r"echo '=== Directory: (.+?) \(\d+ tests? from \d+ files?\) ==='")
+    with open(filepath) as f:
+        for line in f:
+            m = dir_pattern.match(line.strip())
+            if m:
+                dirs.append(m.group(1))
+    return dirs
+
+
 def main():
     log_dir = sys.argv[1] if len(sys.argv) > 1 else '/tmp'
     num_workers = int(sys.argv[2]) if len(sys.argv) > 2 else 7
 
     all_results = {}
+    all_assigned = {}
     for i in range(1, num_workers + 1):
         path = os.path.join(log_dir, f'worker_{i}.log')
         if os.path.exists(path):
             all_results[i] = parse_worker_log(path)
         else:
             print(f"<!-- WARNING: {path} not found -->")
+        script_path = os.path.join(log_dir, f'run_worker_{i}.sh')
+        if os.path.exists(script_path):
+            all_assigned[i] = parse_worker_script(script_path)
 
     # Collect per-worker stats
     grand_passed = 0
@@ -205,8 +226,14 @@ def main():
 
     total_tests = grand_passed + grand_failed + grand_skipped + grand_error
     pass_rate = (grand_passed / total_tests * 100) if total_tests > 0 else 0
-    exec_total = grand_passed + grand_failed + grand_error
-    exec_rate = (grand_passed / exec_total * 100) if exec_total > 0 else 0
+
+    # Load AST-based test counts
+    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_counts.json')
+    try:
+        with open(json_path) as f:
+            ast_counts = json.load(f)
+    except FileNotFoundError:
+        ast_counts = {}
 
     # === VS-incompatible pre-computation ===
     vs_incompatible = {
@@ -246,8 +273,11 @@ def main():
     adj_error = grand_error - excluded_error
     adj_skipped = grand_skipped - excluded_skipped
     adj_total = adj_passed + adj_failed + adj_skipped + adj_error
-    adj_executed = adj_passed + adj_failed + adj_error
-    adj_rate = (adj_passed / adj_executed * 100) if adj_executed > 0 else 0
+    adj_rate = (adj_passed / adj_total * 100) if adj_total > 0 else 0
+
+    # AST-based totals (excluding VS-incompatible)
+    ast_total = sum(v for k, v in ast_counts.items() if k not in vs_incompatible)
+    ast_rate = (adj_passed / ast_total * 100) if ast_total > 0 else 0
 
     # Incomplete dirs
     all_incomplete = []
@@ -255,6 +285,21 @@ def main():
         for r in results:
             if r.get('incomplete'):
                 all_incomplete.append((wid, r['directory'], r['declared_tests']))
+
+    # Untested dirs (assigned in script but never started in log)
+    all_untested = []
+    if all_assigned:
+        for wid in sorted(all_assigned.keys()):
+            assigned = all_assigned[wid]
+            if wid not in all_results:
+                # Worker had no log at all — all assigned dirs are untested
+                for d in assigned:
+                    all_untested.append((wid, d))
+                continue
+            tested_dirs = {r['directory'] for r in all_results[wid]}
+            for d in assigned:
+                if d not in tested_dirs:
+                    all_untested.append((wid, d))
 
     # 100% passing dirs
     ok_dirs = []
@@ -282,26 +327,32 @@ def main():
     P(f"| Workers | {len(all_results)} | — |")
     P(f"| Directories completed | {grand_dirs} | {grand_dirs - len(excluded_dirs)} |")
     P(f"| Directories incomplete | {len(all_incomplete)} | — |")
+    if all_untested:
+        P(f"| Directories untested | {len(all_untested)} | — |")
     P(f"| Total tests | {total_tests} | {adj_total} |")
     P(f"| ✅ Passed | {grand_passed} | {adj_passed} |")
     P(f"| ❌ Failed | {grand_failed} | {adj_failed} |")
     P(f"| ⏭️ Skipped | {grand_skipped} | {adj_skipped} |")
     P(f"| ⚠️ Errors | {grand_error} | {adj_error} |")
-    P(f"| **Pass rate (of executed)** | **{exec_rate:.1f}%** ({grand_passed}/{exec_total}) "
-      f"| **{adj_rate:.1f}%** ({adj_passed}/{adj_executed}) |")
+    P(f"| **Pass rate (of total)** | **{pass_rate:.1f}%** ({grand_passed}/{total_tests}) "
+      f"| **{adj_rate:.1f}%** ({adj_passed}/{adj_total}) |")
+    P(f"| **Pass rate (of AST total)** | — "
+      f"| **{ast_rate:.1f}%** ({adj_passed}/{ast_total}) |")
     P(f"| Wall clock | {format_duration(grand_duration)} | — |")
     P()
 
     # --- Worker Overview ---
     P("## Worker Overview")
     P()
-    P("| Worker | Dirs | Incomplete | ✅ | ❌ | ⏭️ | ⚠️ | Duration |")
-    P("|--------|------|------------|-----|-----|-----|-----|----------|")
+    P("| Worker | Dirs | Incomplete | Untested | ✅ | ❌ | ⏭️ | ⚠️ | Duration |")
+    P("|--------|------|------------|----------|-----|-----|-----|-----|----------|")
     for wid in sorted(worker_stats):
         ws = worker_stats[wid]
         inc = len(ws['incomplete'])
         inc_s = str(inc) if inc else '—'
-        P(f"| W{wid} | {len(ws['completed'])} | {inc_s} | {ws['passed']} | {ws['failed']} "
+        unt = len([x for x in all_untested if x[0] == wid]) if all_untested else 0
+        unt_s = str(unt) if unt else '—'
+        P(f"| W{wid} | {len(ws['completed'])} | {inc_s} | {unt_s} | {ws['passed']} | {ws['failed']} "
           f"| {ws['skipped']} | {ws['error']} | {format_duration(ws['duration'])} |")
     P()
 
@@ -367,6 +418,19 @@ def main():
         P("|--------|-----------|----------------|")
         for wid, d, dt in sorted(all_incomplete, key=lambda x: x[1]):
             P(f"| W{wid} | `{d}` | {dt} |")
+        P()
+
+    # --- Untested ---
+    if all_untested:
+        P("## 🚫 Untested Directories (assigned but never started)")
+        P()
+        P(f"> **{len(all_untested)}** directories were assigned to workers but pytest never started for them.")
+        P(f"> These are directories that appear in the worker script but not in the worker log at all.")
+        P()
+        P("| Worker | Directory |")
+        P("|--------|-----------|")
+        for wid, d in sorted(all_untested, key=lambda x: (x[0], x[1])):
+            P(f"| W{wid} | `{d}` |")
         P()
 
     # --- VS-Incompatible ---

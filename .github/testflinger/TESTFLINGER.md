@@ -441,3 +441,224 @@ These can be overridden via script parameters or Jinja2 template variables.
 | `hello_debug.yaml` | Job | Debug job with connectivity checks + machine reservation (jammy) |
 | `broadcom_install.yaml.j2` | Template | Broadcom platform installation |
 | `upstream_t0_tests_202405.txt` | Data | Test case list for 202405 branch |
+| `upstream_t0_tests_trimmed.txt` | Data | Trimmed test list (221 lines) — removed 50 files from 21 useless directories |
+| `analyze_results.py` | Script | Parse worker logs: extract per-directory pytest results, pass/fail/error/skip counts, durations |
+| `compare_runs.py` | Script | Side-by-side comparison of two runs with VS_INCOMPATIBLE filtering and coverage-only sections |
+| `compare_fair.py` | Script | Per-directory fair comparison — only dirs both runs completed |
+| `split_tests.py` | Script | AST-based test counting and distribution across workers |
+| `analyze_slow_dirs.py` | Script | Cross-run analysis of hung, slow (>45min), and all-skip directories with exclusion recommendations |
+| `test_counts.json` | Data | AST-based test counts per directory (1123 total, 90 dirs, 705 VS-compatible) |
+
+---
+
+## 8. Test Result Analysis & Optimization (Week of March 30, 2026)
+
+### Round 3 Results (Prior to This Session)
+
+Four parallel test runs were completed across different machines:
+
+| Run | Machine | Image | Workers | Job ID |
+|-----|---------|-------|---------|--------|
+| husband-ubuntu | husband (10.241.1.33) | ubuntu-sonic | 7 | `8846ee2a` |
+| whomp-official | whomp (10.241.6.29) | official | 7 | `4cdba686` |
+| blubi-ubuntu | blubi (10.241.3.43) | ubuntu-sonic | 10 | `a9488a21` |
+| kroop-official | kroop (10.241.5.21) | official | 15 | `da1448fb` |
+
+### Parser Bug Discovery & Fix
+
+Two critical bugs were found in `analyze_results.py`'s `RESULT_PATTERN` regex that caused many directories to be falsely classified as "incomplete" (hung):
+
+**Bug 1: `={2,}` required 2+ equals signs**
+Pytest uses only 1 `=` when the result line is very long (e.g., `= 11 failed, 12 passed, 23 skipped, 15 warnings, 11 errors in 13815.40s (3:50:15) =`). The pattern `={2,}` missed these.
+
+**Bug 2: `(H:MM:SS)` duration was required**
+Pytest omits the `(H:MM:SS)` formatted duration for fast runs under 60 seconds (e.g., `15.53s` with no parenthesized form). The pattern required it.
+
+**Fix applied:**
+```python
+# Before (buggy):
+RESULT_PATTERN = re.compile(
+    r'^={2,}\s+(.*?)\s+in\s+[\d.]+s\s+\((\d+:\d+:\d+)\)\s*={2,}$'
+)
+
+# After (fixed):
+RESULT_PATTERN = re.compile(
+    r'^={1,}\s+(.*?)\s+in\s+([\d.]+)s\s*(?:\((\d+:\d+:\d+)\))?\s*={1,}$'
+)
+```
+
+**Impact:** Common completed directories jumped from 39 → **60**, and the pass rate gap changed from 6.5% → **3.6%**. Many directories previously thought to be "always stuck" (platform_tests, qos, macsec, etc.) actually completed fine.
+
+### Comparison Reports (Round 3)
+
+Best per-directory fair comparison (husband-ubuntu vs whomp-official):
+- **60 common completed dirs**, AST total = 588
+- Ubuntu-sonic: **57.1%** pass rate
+- Official: **60.7%** pass rate (gap = +3.6%)
+- Directory wins: Ubuntu 4, Official 20, Ties 36
+
+True hangs identified (after parser fix):
+- `acl` — hung on ubuntu-sonic (2/2 runs), stuck at `TestAclWithReboot`. Official completes same tests in 1:44:05 but with 400 errors
+- `copp` — hung on official (2/2 runs), stuck at `test_policer[vlab-01-ARP]`. Already in `VS_INCOMPATIBLE`
+
+### Test List Optimization
+
+Created `analyze_slow_dirs.py` to scan all 4 runs and categorize every directory:
+
+**HUNG directories (2):**
+| Directory | Hung in | Notes |
+|-----------|---------|-------|
+| `acl` | 2x ubuntu-sonic | Stuck at TestAclWithReboot; 0P/25F/400E when it does complete on official |
+| `copp` | 2x official | Already in VS_INCOMPATIBLE |
+
+**ALL-SKIP directories (18):** Always produce 0P/0F/0E — complete waste of worker time:
+`autorestart`, `clock`, `console`, `container_checker`, `container_hardening`, `dualtor`, `dualtor_mgmt`, `kubesonic`, `macsec`, `nat`, `ospf`, `platform_tests/broadcom`, `platform_tests/daemon`, `platform_tests/test_first_time_boot_password_change`, `read_mac`, `restapi`, `sflow`, `upgrade_path`
+
+(9 were already in VS_INCOMPATIBLE; 9 were new exclusion candidates)
+
+**ALL-FAIL + SLOW directories (2):** Zero passes and >1 hour runtime:
+- `drop_packets` — 0P, max 1:05:11
+- `platform_tests/api` — 0P, max 1:50:22 (already VS_INCOMPATIBLE)
+
+**SLOW but productive (need timeout, not exclusion):**
+- `platform_tests` — max 3:50:15, but 12P
+- `generic_config_updater` — max 3:07:54, but 60P
+- `bgp` — max 1:27:32, 20P
+- `route` — max 1:14:21, 19P (clean pass)
+
+**Result:** Created `upstream_t0_tests_trimmed.txt` — removed 50 test files from 21 directories (271 → 221 lines). Updated `run_lxd_parallel.sh` to use the trimmed list.
+
+### Round 4 Results (Current Session)
+
+Three runs submitted with the trimmed test list:
+
+| Run | Machine | Image | Workers | Job ID | State |
+|-----|---------|-------|---------|--------|-------|
+| whomp-ubuntu | whomp (10.241.6.29) | ubuntu-sonic | 9 | `5630d557` | complete |
+| hinopio-ubuntu | hinopio (10.241.6.17) | ubuntu-sonic | 4 | `c9b5ca37` | complete |
+| polari-official | polari (10.241.5.33) | official | 9 | `df91626e` | complete |
+
+**Results summary:**
+
+| Run | Dirs | Completed | Hung | P / F / E |
+|-----|------|-----------|------|-----------|
+| whomp ubuntu | 64 | 63 | `acl` | 356 / 136 / 451 |
+| hinopio ubuntu | 57 | 56 | `acl` | 318 / 127 / 429 |
+| polari official | 62 | 60 | `bgp`*, `ssh`** | 321 / 162 / 683 |
+
+\* `bgp` W4 hung at `test_bgp_session_interface_down[neighbor-bgp_docker]` — websocket close 1006 (abnormal closure)
+\** `ssh` actually completed (9P/2S) but a `DEBUG:tests.conftest` message was injected mid-result-line, corrupting the format so the parser missed it
+
+**Per-directory fair comparison (whomp ubuntu vs polari official):**
+- **51 common completed dirs**, AST total = 514
+- Ubuntu-sonic: **52.1%** pass rate
+- Official: **61.3%** pass rate (gap = +9.1%)
+- Directory wins: Ubuntu 4, Official 22, Ties 25
+- Ubuntu advantages: `fib`, `generic_config_updater`, `http`, `platform_tests`
+- Official advantages: `dhcp_relay`, `gnmi`, `lldp`, `memory_checker`, `vlan`, `telemetry`, etc.
+
+Gap increased from 3.6% (Round 3) to 9.1% (Round 4), mainly because several directories (`lldp`, `vlan`, `sub_port_interfaces`) that passed in Round 3's ubuntu run now got all-errors in Round 4.
+
+### Confirmed: `acl/test_acl.py` Always Hangs on Ubuntu-Sonic
+
+Across all 4 ubuntu-sonic runs (husband, blubi, whomp, hinopio), `acl/test_acl.py` hung every single time. This file should be added to the exclusion list for future runs. The other `acl/` subdirectories (`custom_acl_table`, `null_route`) complete fine.
+
+### Known Parser Edge Case
+
+Polari's `ssh` directory was falsely flagged as incomplete because pytest's result line had a `DEBUG:tests.conftest:[log_custom_msg]` message injected in the middle:
+```
+= 9 passed, 2 skipped, 8 xfailed,DEBUG:tests.conftest:[log_custom_msg] item: <Function test_ssh_stress>
+ 24 xpassed, 6 warnings in 742.83s (0:12:22) ==
+```
+The result line was split across two lines, breaking the regex match. This is a known edge case for future parser improvement.
+
+---
+
+## 9. Personal Contribution Ledger (Archival Evidence)
+
+This section records concrete work delivered in this effort, with evidence artifacts and measurable impact.
+
+| Contribution | What was done | Evidence artifacts | Measurable impact |
+|-------------|---------------|--------------------|-------------------|
+| 202405 test alignment | Switched test framework source from outdated fork to `canonical/sonic-mgmt` on `ubuntu-sonic-202405` | `setup-testbed-ci.sh`, Section 1 / Problem 1 | Eliminated branch drift and aligned test content to release target |
+| docker-sonic-mgmt compatibility fix | Identified Docker Hub image mismatch; established local build path and pinned build flags (`NOBULLSEYE=0 NONOBLE=1 LEGACY_SONIC_MGMT_DOCKER=n`) | `rules/docker-sonic-mgmt.mk`, `dockers/docker-sonic-mgmt/Dockerfile.j2`, Section 1 / Problem 2-3 | Restored runtime compatibility between test container and 202405 test suite |
+| Config externalization | Replaced hardcoded sonic-mgmt repo edits with runtime patching via `setup-local-env.sh` | `setup-local-env.sh`, Section 1 / Problem 4 | Removed environment-specific fork hacks; reduced rebase and branch-switch friction |
+| CI architecture refactor | Migrated monolithic inline YAML flow into modular scripts (`run_lxd_parallel.sh`, `setup-testbed*.sh`, `deploy-testbed.sh`) | Section 2, file inventory in Section 7 | Better maintainability, easier local debugging, safer idempotent re-runs |
+| Parallel test infrastructure | Implemented LXD template+clone pipeline with RAM-based worker auto-scaling, storage auto-detection, and heartbeat progress output | `run_lxd_parallel.sh`, Section 4 | Enabled stable parallel execution with isolated workers and reduced cross-test interference |
+| Result parser reliability fix | Fixed `RESULT_PATTERN` to support single `=` summary lines and optional `(H:MM:SS)` duration | `analyze_results.py`, Section 8 / Parser Bug Discovery & Fix | Common completed directories increased from 39 to 60; corrected false-hang classification |
+| Analysis tooling and fair comparison | Added/used `analyze_slow_dirs.py`, `compare_runs.py`, `compare_fair.py`; generated fair per-directory reports | `best-perdir-comparison.md`, `round4-perdir-comparison.md`, Section 8 | Produced apples-to-apples comparison and identified high-impact gap drivers |
+| Test list optimization | Built trimmed list by removing wasteful always-skip/hung cases | `upstream_t0_tests_trimmed.txt`, Section 8 / Test List Optimization | Removed 50 test files from 21 directories (271 -> 221), improving worker efficiency |
+| Regression hotspot identification | Confirmed `acl/test_acl.py` as always-hanging on ubuntu-sonic and documented parser edge case for `ssh` | Section 8 / Confirmed hang + Known Parser Edge Case | Provided actionable next-step exclusion and parser-hardening targets |
+
+### Archival fingerprint for this report
+
+| Item | Value |
+|------|-------|
+| Report date | 2026-04-01 |
+| Repository | `canonical/ubuntu-sonic-buildimage` |
+| Buildimage branch context | `feature_noble_build` |
+| sonic-mgmt branch context | `ubuntu-sonic-202405` |
+| Round 4 run IDs | `5630d557-whomp-ubuntu`, `c9b5ca37-hinopio-ubuntu`, `df91626e-polari-official` |
+| Core comparison report | `round4-perdir-comparison.md` |
+
+---
+
+## 10. Reproducibility Entry Point
+
+This section provides minimal reproducible paths for both evidence replay (from archived logs) and full pipeline rerun.
+
+### A) Evidence replay from archived worker logs (fast path)
+
+Run from `.github/testflinger`:
+
+```bash
+python3 analyze_results.py 5630d557-whomp-ubuntu 9 > 5630d557-analysis.md
+python3 analyze_results.py df91626e-polari-official 9 > df91626e-analysis.md
+python3 compare_fair.py 5630d557-whomp-ubuntu 9 "whomp ubuntu-sonic" df91626e-polari-official 9 "polari official" > round4-perdir-comparison.reproduced.md
+diff -u round4-perdir-comparison.md round4-perdir-comparison.reproduced.md || true
+```
+
+Expected inputs:
+- Log directories with `worker_N.log` files:
+    - `5630d557-whomp-ubuntu/worker_1.log` ... `worker_9.log`
+    - `df91626e-polari-official/worker_1.log` ... `worker_9.log`
+- `test_counts.json`
+
+Expected outputs:
+- Per-run summaries: `5630d557-analysis.md`, `df91626e-analysis.md`
+- Fair comparison replay: `round4-perdir-comparison.reproduced.md`
+
+### B) Full pipeline rerun on testflinger (slow path)
+
+1. Submit job:
+
+```bash
+testflinger-cli submit .github/testflinger/launch_lxd_parallel.yaml
+```
+
+2. Track execution:
+
+```bash
+testflinger-cli poll <JOB_ID>
+testflinger-cli status <JOB_ID>
+testflinger-cli results <JOB_ID>
+```
+
+3. On the provisioned host, orchestrator entrypoint is:
+
+```bash
+bash -x ~/run_lxd_parallel.sh 10.239.7.20
+```
+
+Deterministic runtime inputs used by this report:
+- Test framework: `canonical/sonic-mgmt` @ `ubuntu-sonic-202405`
+- Artifact host: `http://10.239.7.20:8000`
+- Core artifacts: `sonic-vs.img.gz`, `cEOS64-lab-4.32.5M.tar`, `docker-sonic-mgmt.gz`
+- Test list: `upstream_t0_tests_trimmed.txt`
+
+### Reproducibility acceptance criteria
+
+A reproduction attempt is considered successful when all conditions below are met:
+- `compare_fair.py` output reproduces the same Round 4 headline metrics (51 common dirs, AST total 514, 52.1% vs 61.3%)
+- Winner distribution remains consistent (A advantage 4, B advantage 22, ties/both pass 25)
+- Known edge-case notes remain observable (`acl/test_acl.py` hang pattern, `ssh` split result-line parser limitation)
