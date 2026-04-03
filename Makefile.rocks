@@ -1,0 +1,46 @@
+# Makefile.rocks - Build rock (OCI) containers in parallel
+#
+# Called by build_rocks.sh after a full normal build completes.
+# Each rock target invokes build_rock.sh to build a single container.
+#
+# Usage:
+#   make -j4 -f Makefile.rocks                          # build all rocks
+#   make -f Makefile.rocks rock-dockers/docker-database  # build one rock
+
+SHELL := /bin/bash
+.DEFAULT_GOAL := all
+
+ROCK_IMAGES := \
+	dockers/docker-database \
+	dockers/docker-dhcp-relay \
+	dockers/docker-eventd \
+	dockers/docker-fpm-frr \
+	dockers/docker-iccpd \
+	dockers/docker-lldp \
+	dockers/docker-macsec \
+	dockers/docker-mux \
+	dockers/docker-nat \
+	dockers/docker-orchagent \
+	dockers/docker-platform-monitor \
+	dockers/docker-router-advertiser \
+	dockers/docker-sflow \
+	dockers/docker-snmp \
+	dockers/docker-sonic-gnmi \
+	dockers/docker-sonic-mgmt-framework \
+	dockers/docker-teamd
+
+# Copy shared files needed by rockcraft into target/files/noble/
+.PHONY: rock-prep
+rock-prep:
+	cp files/rsyslog/00-load-omprog.conf target/files/noble/
+	cp files/rsyslog/rsyslog.conf target/files/noble/
+	cp files/supervisor/supervisord.conf target/files/noble/
+	cp files/build_templates/syslog-layer.yaml target/files/noble/
+
+# Per-rock targets — run in parallel via make -j
+.PHONY: $(addprefix rock-,$(ROCK_IMAGES))
+$(addprefix rock-,$(ROCK_IMAGES)): rock-%: rock-prep
+	./build_rock.sh $*
+
+.PHONY: all
+all: $(addprefix rock-,$(ROCK_IMAGES))

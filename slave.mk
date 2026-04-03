@@ -1144,6 +1144,7 @@ $(addprefix $(TARGET_PATH)/, $(DOCKER_IMAGES)) : $(TARGET_PATH)/%.gz : .platform
 		$$($$*.gz_PATH)/Dockerfile.j2 \
 		$(call dpkg_depend,$(TARGET_PATH)/%.gz.dep)
 	$(HEADER)
+	if [ -f $@ ] && [ -f $($*.gz_PATH)/rockcraft.yaml ]; then echo "Skipping $@: built by rock"; exit 0; fi
 
 	# Load the target deb from DPKG cache
 	$(call LOAD_CACHE,$*.gz,$@)
