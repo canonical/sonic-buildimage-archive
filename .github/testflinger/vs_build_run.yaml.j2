@@ -20,12 +20,12 @@ test_data:
     ssh ubuntu@$DEVICE_IP pip3 install -q --user j2cli > /dev/null
     ssh ubuntu@$DEVICE_IP pip3 install -q --user jinjanator > /dev/null
 
-    # 2. Build vs image
+    # 2. Build vs image with rock containers
     ssh ubuntu@$DEVICE_IP git clone -q -b {{ branch }} --recurse-submodules https://github.com/canonical/sonic-buildimage.git > /dev/null
     ssh ubuntu@$DEVICE_IP sudo modprobe overlay
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && make init"
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && MIRROR_SECURITY_URLS=http://mirror.csclub.uwaterloo.ca/ubuntu/ MIRROR_URLS=http://mirror.csclub.uwaterloo.ca/ubuntu/ make configure PLATFORM=vs"
-    ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 all"
+    ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 -f Makefile.rocks target/sonic-vs.img.gz"
 
     # 3. Prepare all images
     git clone -b sonic_on_ubuntu https://github.com/jy5275/sonic-mgmt > /dev/null

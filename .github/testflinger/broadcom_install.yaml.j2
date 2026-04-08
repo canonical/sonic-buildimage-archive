@@ -16,16 +16,11 @@ test_data:
     ssh ubuntu@$DEVICE_IP sudo systemctl restart docker
     ssh ubuntu@$DEVICE_IP sudo chmod a+rw /var/run/docker.sock
 
-    # 2. Build brcm image (with container images built from docker build)
+    # 2. Build brcm image with rock containers
     ssh ubuntu@$DEVICE_IP sudo modprobe overlay
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && make init"
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && MIRROR_SECURITY_URLS=http://mirror.csclub.uwaterloo.ca/ubuntu/ MIRROR_URLS=http://mirror.csclub.uwaterloo.ca/ubuntu/ make configure PLATFORM=broadcom"
-    ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 target/sonic-broadcom.bin"
-
-    # 3. Build brcm image (with container images built from rockcraft)
-    ssh ubuntu@$DEVICE_IP rm /home/ubuntu/sonic-buildimage/target/sonic-broadcom.bin
-    ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && ./build_rocks.sh"
-    ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 target/sonic-broadcom.bin"
+    ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 -f Makefile.rocks target/sonic-broadcom.bin"
 
     # 4. Prepare HTTP service
     ssh ubuntu@$DEVICE_IP test -f /home/ubuntu/sonic-buildimage/target/sonic-broadcom.bin
