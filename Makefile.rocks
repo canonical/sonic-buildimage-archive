@@ -1,14 +1,15 @@
-# Makefile.rocks - Build rock (OCI) containers in parallel
-#
-# Called by build_rocks.sh after a full normal build completes.
-# Each rock target invokes build_rock.sh to build a single container.
+# Makefile.rocks - Build rock (OCI) containers
 #
 # Usage:
-#   make -j4 -f Makefile.rocks                          # build all rocks
-#   make -f Makefile.rocks rock-dockers/docker-database  # build one rock
+#   make -f Makefile.rocks target/sonic-vs.img.gz        # one-shot full build
+#   make -j4 -f Makefile.rocks                           # build all rocks only
+#   make -f Makefile.rocks rock-dockers/docker-database   # build one rock
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := all
+
+include rules/config
+-include rules/config.user
 
 ROCK_IMAGES := \
 	dockers/docker-database \
@@ -44,3 +45,13 @@ $(addprefix rock-,$(ROCK_IMAGES)): rock-%: rock-prep
 
 .PHONY: all
 all: $(addprefix rock-,$(ROCK_IMAGES))
+
+# One-shot build: full docker build, rock replace, rebuild installer.
+# Usage: make -f Makefile.rocks target/sonic-vs.img.gz
+#        make -f Makefile.rocks target/sonic-broadcom.bin
+SUBMAKE := $(MAKE) BLDENV=noble -f Makefile.work
+target/%:
+	$(SUBMAKE) $@
+	$(MAKE) -j$(SONIC_BUILD_JOBS) -f Makefile.rocks all
+	rm -f $@
+	$(SUBMAKE) $@
