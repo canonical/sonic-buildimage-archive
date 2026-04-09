@@ -13,6 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Inject branch name into testflinger job
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          sed -i "s|-b feature_noble_build|-b ${BRANCH}|g" ${{ github.workspace }}/.github/testflinger/build_brcm_on_feature_noble_build.yaml
+          echo "Using branch: ${BRANCH} for testflinger job"
+
       - name: Submit job
         id: submit-job
         uses: canonical/testflinger/.github/actions/submit@main
