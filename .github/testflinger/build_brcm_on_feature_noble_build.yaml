@@ -17,6 +17,13 @@ test_data:
     ssh ubuntu@$DEVICE_IP sudo systemctl restart docker
     ssh ubuntu@$DEVICE_IP sudo chmod a+rw /var/run/docker.sock
 
+    ssh ubuntu@$DEVICE_IP sudo snap install lxd
+    ssh ubuntu@$DEVICE_IP sudo lxd init --minimal
+    ssh ubuntu@$DEVICE_IP sudo lxd --version
+    ssh ubuntu@$DEVICE_IP sudo systemctl status snap.lxd.daemon.service
+    ssh ubuntu@$DEVICE_IP sudo snap install rockcraft --classic
+    ssh ubuntu@$DEVICE_IP sudo rockcraft --version
+
     ssh ubuntu@$DEVICE_IP pip3 install -q --user j2cli > /dev/null
     ssh ubuntu@$DEVICE_IP pip3 install -q --user jinjanator > /dev/null
 
