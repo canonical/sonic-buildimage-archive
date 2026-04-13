@@ -23,6 +23,15 @@ test_data:
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 target/sonic-broadcom.bin"
 
     # 3. Build brcm image (with container images built from rockcraft)
+    ssh ubuntu@$DEVICE_IP sudo snap install rockcraft --classic
+    ssh ubuntu@$DEVICE_IP lxd init --auto
+    ssh ubuntu@$DEVICE_IP sudo sh -c 'echo "net.ipv4.conf.all.forwarding=1" > /etc/sysctl.d/99-forwarding.conf'
+    ssh ubuntu@$DEVICE_IP sudo systemctl restart systemd-sysctl
+    ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
     ssh ubuntu@$DEVICE_IP rm /home/ubuntu/sonic-buildimage/target/sonic-broadcom.bin
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && ./build_rocks.sh"
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && DBGOPT=1 SONIC_BUILD_RETRY_COUNT=15 make SONIC_BUILD_JOBS=4 target/sonic-broadcom.bin"
