@@ -16,7 +16,17 @@ test_data:
     ssh ubuntu@$DEVICE_IP sudo systemctl restart docker
     ssh ubuntu@$DEVICE_IP sudo chmod a+rw /var/run/docker.sock
 
-    # 2. Build brcm image with rock containers
+    # 2. Install the rock-related dependencies
+    ssh ubuntu@$DEVICE_IP sudo snap install rockcraft --classic
+    ssh ubuntu@$DEVICE_IP lxd init --auto
+    ssh ubuntu@$DEVICE_IP sudo sh -c 'echo "net.ipv4.conf.all.forwarding=1" > /etc/sysctl.d/99-forwarding.conf'
+    ssh ubuntu@$DEVICE_IP sudo systemctl restart systemd-sysctl
+    ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+    # 3. Build broadcom image (rock)
     ssh ubuntu@$DEVICE_IP sudo modprobe overlay
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && make init"
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && MIRROR_SECURITY_URLS=http://mirror.csclub.uwaterloo.ca/ubuntu/ MIRROR_URLS=http://mirror.csclub.uwaterloo.ca/ubuntu/ make configure PLATFORM=broadcom"

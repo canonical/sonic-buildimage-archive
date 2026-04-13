@@ -27,7 +27,17 @@ test_data:
     ssh ubuntu@$DEVICE_IP pip3 install -q --user j2cli > /dev/null
     ssh ubuntu@$DEVICE_IP pip3 install -q --user jinjanator > /dev/null
 
-    # 2. Build broadcom image
+    # 2. Install the rock-related dependencies
+    ssh ubuntu@$DEVICE_IP sudo snap install rockcraft --classic
+    ssh ubuntu@$DEVICE_IP lxd init --auto
+    ssh ubuntu@$DEVICE_IP sudo sh -c 'echo "net.ipv4.conf.all.forwarding=1" > /etc/sysctl.d/99-forwarding.conf'
+    ssh ubuntu@$DEVICE_IP sudo systemctl restart systemd-sysctl
+    ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+    # 3. Build broadcom image (rock)
     ssh ubuntu@$DEVICE_IP git clone -q -b feature_noble_build --recurse-submodules https://github.com/canonical/sonic-buildimage.git > /dev/null
     ssh ubuntu@$DEVICE_IP sudo modprobe overlay
     ssh ubuntu@$DEVICE_IP "cd /home/ubuntu/sonic-buildimage && make init"
@@ -36,3 +46,9 @@ test_data:
 
 output_timeout: 1800  # 30min
 global_timeout: 86400 # 24hours
+
+reserve_data:
+  ssh_keys:
+    - lp:yanjiangpku
+    - gh:jy5275
+  timeout: 21600
