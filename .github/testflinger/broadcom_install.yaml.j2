@@ -19,7 +19,7 @@ test_data:
     # 2. Install the rock-related dependencies
     ssh ubuntu@$DEVICE_IP sudo snap install rockcraft --classic
     ssh ubuntu@$DEVICE_IP lxd init --auto
-    ssh ubuntu@$DEVICE_IP sudo sh -c 'echo "net.ipv4.conf.all.forwarding=1" > /etc/sysctl.d/99-forwarding.conf'
+    ssh ubuntu@$DEVICE_IP "echo 'net.ipv4.conf.all.forwarding=1' | sudo tee /etc/sysctl.d/99-forwarding.conf"
     ssh ubuntu@$DEVICE_IP sudo systemctl restart systemd-sysctl
     ssh ubuntu@$DEVICE_IP sudo iptables  -I DOCKER-USER -i lxdbr0 -j ACCEPT
     ssh ubuntu@$DEVICE_IP sudo ip6tables -I DOCKER-USER -i lxdbr0 -j ACCEPT
